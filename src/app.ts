@@ -9,6 +9,7 @@ import { registerChatRoutes } from "./routes/chat";
 import { registerEmbeddingsRoutes } from "./routes/embeddings";
 import { registerHealthRoutes } from "./routes/health";
 import { registerModelsRoutes } from "./routes/models";
+import { registerPlaygroundRoutes } from "./routes/playground";
 import { ChatService } from "./services/chat.service";
 import { EmbeddingsService } from "./services/embeddings.service";
 import { ModelResolver } from "./services/model-resolver";
@@ -112,6 +113,7 @@ export function buildApp(options: BuildAppOptions) {
 
   registerHealthRoutes(app, options.env.SERVICE_NAME);
   registerModelsRoutes(app, options.modelResolver);
+  registerPlaygroundRoutes(app);
   registerChatRoutes(app, options.chatService, requireAuth);
   registerEmbeddingsRoutes(app, options.embeddingsService, requireAuth);
 

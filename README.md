@@ -14,6 +14,7 @@
 - `POST /api/v1/llm/chat/completions`
 - `POST /api/v1/llm/embeddings`
 - `GET /api/v1/llm/models`
+- `GET /playground`
 - `GET /healthz`
 
 ## Public model syntax
@@ -151,6 +152,8 @@ npm start
 If you do not want Kafka locally, keep `KAFKA_ENABLED=false`.
 
 If browser code hosted on `agumbe.ai` calls `api.agumbe.ai` directly, keep `CORS_ALLOWED_ORIGINS=https://agumbe.ai`. Multiple allowed origins can be supplied as a comma-separated list.
+
+For internal testing, the gateway also exposes a lightweight browser playground at `/playground`.
 
 ## Build and run
 
