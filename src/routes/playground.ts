@@ -1139,7 +1139,20 @@ How does Argo CD work?</textarea>
         });
 
         const text = await response.text();
-        const data = text ? JSON.parse(text) : {};
+        let data = {};
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = {
+              error: {
+                message: text.includes("<html") || text.includes("<!doctype")
+                  ? "The gateway returned HTML instead of JSON. This usually means the ingress route is missing or the upstream returned a non-API error page."
+                  : text,
+              },
+            };
+          }
+        }
 
         if (!response.ok) {
           const message = data && data.error && data.error.message
@@ -1536,6 +1549,26 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         gap:10px;
         margin-top:12px;
       }
+      .selection-card {
+        margin-top: 12px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid rgba(129,69,255,0.16);
+        background: rgba(255,255,255,0.82);
+        display: grid;
+        gap: 8px;
+      }
+      .selection-active {
+        background: rgba(129,69,255,0.12);
+        color: var(--purple);
+        border-color: rgba(129,69,255,0.28);
+        box-shadow: inset 0 0 0 1px rgba(129,69,255,0.08);
+      }
+      .selection-grid {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
       .mini-hint { color:var(--muted); font-size:0.82rem; }
       .icon-button { min-width:44px; min-height:44px; padding:10px 14px; }
       .token.masked { -webkit-text-security: disc; }
@@ -1641,6 +1674,10 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
             <a class="ghost button-link" href="/playground">${arrowLeftIcon}<span class="button-text">Back to Playground</span></a>
           </div>
           <div class="mini-hint" style="margin-top: 10px;">The selected token is stored in this browser session and automatically picked up by the main playground page.</div>
+          <div id="activeSelectionCard" class="selection-card">
+            <strong>No active playground credential selected yet.</strong>
+            <div class="mini-hint">Choose Session JWT or App Token to make it the active Bearer token for the main playground.</div>
+          </div>
         </div>
 
         <div class="section">
@@ -1682,6 +1719,7 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
       const useSessionJwtButton = document.getElementById("useSessionJwt");
       const createAppTokenButton = document.getElementById("createAppToken");
       const useAppTokenButton = document.getElementById("useAppToken");
+      const activeSelectionCard = document.getElementById("activeSelectionCard");
       const authAccountMenuShell = document.getElementById("authAccountMenuShell");
       const authAccountMenuButton = document.getElementById("authAccountMenuButton");
       const authAccountMenuPanel = document.getElementById("authAccountMenuPanel");
@@ -1693,7 +1731,8 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         sessionJwt: sessionStorage.getItem(storageKeys.sessionJwt) || "",
         latestAppToken: sessionStorage.getItem(storageKeys.latestAppToken) || "",
         latestAppBundle: null,
-        apps: []
+        apps: [],
+        activeToken: sessionStorage.getItem(storageKeys.activeToken) || ""
       };
 
       try { state.latestAppBundle = JSON.parse(sessionStorage.getItem(storageKeys.latestAppBundle) || "null"); } catch { state.latestAppBundle = null; }
@@ -1717,6 +1756,45 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
       function setStatus(message) { status.textContent = message; }
       function setJson(value) { jsonOutput.textContent = JSON.stringify(value, null, 2); }
       function closeAuthMenu() { authAccountMenuPanel.classList.add("hidden"); }
+      function renderActiveSelection() {
+        const activeToken = sessionStorage.getItem(storageKeys.activeToken) || state.activeToken || "";
+        state.activeToken = activeToken;
+
+        useSessionJwtButton.classList.remove("selection-active");
+        useAppTokenButton.classList.remove("selection-active");
+
+        if (!activeToken) {
+          activeSelectionCard.innerHTML = '<strong>No active playground credential selected yet.</strong><div class="mini-hint">Choose Session JWT or App Token to make it the active Bearer token for the main playground.</div>';
+          return;
+        }
+
+        const isSession = !!state.sessionJwt && activeToken === state.sessionJwt;
+        const isAppToken = !!state.latestAppToken && activeToken === state.latestAppToken;
+
+        if (isSession) {
+          useSessionJwtButton.classList.add("selection-active");
+        }
+
+        if (isAppToken) {
+          useAppTokenButton.classList.add("selection-active");
+        }
+
+        const tokenLabel = isSession
+          ? "Session JWT"
+          : isAppToken
+            ? "App Token"
+            : "Custom Active Token";
+        const subject = decodeJwt(activeToken);
+
+        activeSelectionCard.innerHTML = [
+          '<strong>Currently selected: ' + escapeHtml(tokenLabel) + '</strong>',
+          '<div class="selection-grid">',
+          '<div><span class="mini-hint">Source</span><br />' + escapeHtml(tokenLabel) + '</div>',
+          '<div><span class="mini-hint">Subject</span><br />' + escapeHtml(subject?.email || subject?.client_key || subject?.id || subject?.sub || "Hidden") + '</div>',
+          '</div>'
+        ].join("");
+      }
+
       function clearCredentials() {
         sessionStorage.removeItem(storageKeys.activeToken);
         sessionStorage.removeItem(storageKeys.sessionJwt);
@@ -1726,9 +1804,11 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         state.latestAppToken = "";
         state.latestAppBundle = null;
         state.apps = [];
+        state.activeToken = "";
         closeAuthMenu();
         renderApps([]);
         renderTokenResult(null);
+        renderActiveSelection();
       }
 
       function initialsFromClaims(claims) {
@@ -1826,7 +1906,9 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
             sessionStorage.setItem(storageKeys.latestAppToken, accessToken);
             sessionStorage.setItem(storageKeys.latestAppBundle, JSON.stringify(data.data));
             sessionStorage.setItem(storageKeys.activeToken, accessToken);
+            state.activeToken = accessToken;
             renderTokenResult(data.data);
+            renderActiveSelection();
             setJson(data);
             renderIdentity(decodeJwt(state.sessionJwt), "Session JWT");
             setStatus("Selected app token is now active in the playground.");
@@ -1902,7 +1984,20 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           body: payload ? JSON.stringify(payload) : undefined,
         });
         const text = await response.text();
-        const data = text ? JSON.parse(text) : {};
+        let data = {};
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = {
+              error: {
+                message: text.includes("<html") || text.includes("<!doctype")
+                  ? "The gateway returned HTML instead of JSON. This usually means the ingress route is missing or the upstream returned a non-API error page."
+                  : text,
+              },
+            };
+          }
+        }
         if (!response.ok) throw new Error(data?.error?.message || "Request failed");
         return data;
       }
@@ -1967,7 +2062,9 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           return;
         }
         sessionStorage.setItem(storageKeys.activeToken, state.sessionJwt);
+        state.activeToken = state.sessionJwt;
         renderIdentity(decodeJwt(state.sessionJwt), "Session JWT");
+        renderActiveSelection();
         setStatus("Session JWT is now the active Bearer token for the main playground.");
       });
 
@@ -1988,6 +2085,7 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           sessionStorage.setItem(storageKeys.latestAppToken, accessToken);
           sessionStorage.setItem(storageKeys.latestAppBundle, JSON.stringify(data.data));
           renderTokenResult(data.data);
+          renderActiveSelection();
           loadApps();
           setJson(data);
           setStatus("App token created. You can use it in the main playground.");
@@ -2005,7 +2103,9 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           return;
         }
         sessionStorage.setItem(storageKeys.activeToken, state.latestAppToken);
+        state.activeToken = state.latestAppToken;
         renderIdentity(decodeJwt(state.latestAppToken), "App Token");
+        renderActiveSelection();
         setStatus("App token is now the active Bearer token for the main playground.");
       });
 
@@ -2038,6 +2138,7 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         renderApps([]);
       }
       renderTokenResult(state.latestAppBundle);
+      renderActiveSelection();
       consumeOAuthResult();
     </script>
   </body>
