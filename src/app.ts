@@ -12,7 +12,7 @@ import { ChatService } from "./services/chat.service";
 import { EmbeddingsService } from "./services/embeddings.service";
 import { ModelResolver } from "./services/model-resolver";
 import { normalizeError, toErrorResponse } from "./utils/errors";
-import { logger } from "./utils/logger";
+import { loggerOptions } from "./utils/logger";
 
 type BuildAppOptions = {
   env: Env;
@@ -23,7 +23,7 @@ type BuildAppOptions = {
 
 export function buildApp(options: BuildAppOptions) {
   const app = Fastify({
-    logger,
+    logger: loggerOptions,
     trustProxy: true,
     requestIdHeader: "x-request-id",
     genReqId: (request) =>

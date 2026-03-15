@@ -1,9 +1,11 @@
 import "dotenv/config";
-import pino from "pino";
+import pino, { type LoggerOptions } from "pino";
 
-export const logger = pino({
+export const loggerOptions: LoggerOptions = {
   level: process.env.LOG_LEVEL || "info",
   base: {
     service: process.env.SERVICE_NAME || "llm-gateway",
   },
-});
+};
+
+export const logger = pino(loggerOptions);
