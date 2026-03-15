@@ -294,7 +294,8 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
       input:not([type="checkbox"]),
       select,
       textarea,
-      button {
+      button,
+      .button-link {
         font: inherit;
       }
 
@@ -350,15 +351,21 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
         gap: 10px;
       }
 
-      button {
+      button,
+      .button-link {
         border: 1px solid rgba(129, 69, 255, 0.14);
         border-radius: 999px;
         padding: 12px 18px;
         cursor: pointer;
         transition: transform 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
 
-      button:hover {
+      button:hover,
+      .button-link:hover {
         transform: translateY(-1px);
       }
 
@@ -545,7 +552,7 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
       <section class="hero">
         <div class="hero-top">
           <span class="eyebrow">Agumbe Playground</span>
-          <a class="ghost" href="/playground/auth" style="text-decoration:none; display:inline-flex; align-items:center;">Open Sign In & Tokens</a>
+          <a class="ghost button-link" href="/playground/auth">Open Sign In & Tokens</a>
         </div>
         <h1>Sits between applications and AI models.</h1>
         <p>
@@ -1245,25 +1252,28 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
       .section { margin-bottom:18px; }
       .section:last-child { margin-bottom:0; }
       .section-title { margin:0 0 10px; font-size:0.88rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+      .step-copy { margin: 0 0 12px; color: var(--muted); font-size: 0.95rem; }
       .grid { display:grid; gap:12px; }
       .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       label { display:grid; gap:6px; font-size:0.95rem; color:var(--muted); }
-      input:not([type="checkbox"]), textarea, button { font: inherit; }
+      input:not([type="checkbox"]), textarea, button, .button-link { font: inherit; }
       input:not([type="checkbox"]), textarea {
         width:100%; border:1px solid rgba(129,69,255,0.16); border-radius:16px; background:rgba(255,255,255,0.92);
         padding:12px 14px; color:var(--ink); outline:none;
       }
       input:focus, textarea:focus { border-color: rgba(0,163,255,0.65); box-shadow: 0 0 0 4px rgba(0,163,255,0.12); }
-      button {
+      button,
+      .button-link {
         border:1px solid rgba(129,69,255,0.14); border-radius:999px; padding:12px 18px; cursor:pointer;
         transition: transform 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
+        text-decoration:none; display:inline-flex; align-items:center; justify-content:center;
       }
-      button:hover { transform: translateY(-1px); }
+      button:hover, .button-link:hover { transform: translateY(-1px); }
       button:disabled { cursor:wait; opacity:0.65; }
       .primary { background: var(--orange); color: var(--white); box-shadow: 0 14px 24px rgba(255,109,63,0.18); }
-      .secondary { background: rgba(0,163,255,0.08); color: var(--ink); text-decoration:none; display:inline-flex; align-items:center; }
-      .ghost { background: rgba(255,255,255,0.85); color: var(--purple); text-decoration:none; display:inline-flex; align-items:center; }
+      .secondary { background: rgba(0,163,255,0.08); color: var(--ink); }
+      .ghost { background: rgba(255,255,255,0.85); color: var(--purple); }
       .accent { background: rgba(129,69,255,0.1); color: var(--purple); }
       .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
       .identity, .token-result {
@@ -1284,15 +1294,16 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
       <section class="hero">
         <div class="hero-top">
           <span class="eyebrow">Agumbe Playground Auth</span>
-          <a class="secondary" href="/playground">Back to Playground</a>
+          <a class="secondary button-link" href="/playground">Back to Playground</a>
         </div>
         <h1>Sign in and manage tokens.</h1>
-        <p>Use the existing auth service for email sign-in, signup, Google OAuth, and app token creation. The active token is stored in this browser session for the main playground.</p>
+        <p>Complete the auth flow in order: sign in or sign up, create an app token if you want one, then send the active credential back to the main playground.</p>
       </section>
 
       <section class="card">
         <div class="section">
-          <p class="section-title">Sign In</p>
+          <p class="section-title">Step 1 · Sign In Or Sign Up</p>
+          <p class="step-copy">Use email/password or Google OAuth to mint a session JWT through the existing auth service.</p>
           <div class="grid cols-2">
             <label>
               First Name
@@ -1315,7 +1326,6 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
             <button id="signIn" class="primary" type="button">Sign In</button>
             <button id="signUp" class="accent" type="button">Sign Up</button>
             <button id="googleOauth" class="ghost" type="button">Continue with Google</button>
-            <button id="useSessionJwt" class="secondary" type="button">Use Session JWT</button>
           </div>
           <div id="identity" class="identity" style="margin-top:12px;">
             <strong>No active session yet.</strong>
@@ -1326,7 +1336,8 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         </div>
 
         <div class="section">
-          <p class="section-title">Create App Token</p>
+          <p class="section-title">Step 2 · Create App Token</p>
+          <p class="step-copy">Optional for programmatic testing. This reuses the current auth app register + token flow.</p>
           <div class="grid cols-3">
             <label>
               App Name
@@ -1343,12 +1354,22 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           </div>
           <div class="actions">
             <button id="createAppToken" class="accent" type="button">Create App Token</button>
-            <button id="useAppToken" class="secondary" type="button">Use App Token</button>
           </div>
           <div id="tokenResult" class="token-result" style="margin-top:12px;">
             <strong>No app token created yet.</strong>
             <div class="mini-hint">This uses the existing auth service's app register + app token flow. It is an API token, not a separate LLM-native key yet.</div>
           </div>
+        </div>
+
+        <div class="section">
+          <p class="section-title">Step 3 · Use In Playground</p>
+          <p class="step-copy">Choose which credential should be active in the main playground, then go back and start testing requests.</p>
+          <div class="actions">
+            <button id="useSessionJwt" class="secondary" type="button">Use Session JWT</button>
+            <button id="useAppToken" class="secondary" type="button">Use App Token</button>
+            <a class="ghost button-link" href="/playground">Back to Playground</a>
+          </div>
+          <div class="mini-hint" style="margin-top: 10px;">The selected token is stored in this browser session and automatically picked up by the main playground page.</div>
         </div>
 
         <div class="section">
