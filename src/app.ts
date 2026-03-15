@@ -1,0 +1,80 @@
+import { randomUUID } from "crypto";
+import Fastify from "fastify";
+import cookie from "@fastify/cookie";
+import rateLimit from "@fastify/rate-limit";
+import type { Env } from "./config/env";
+import { createRequireAuth } from "./middleware/requireAuth";
+import { registerChatRoutes } from "./routes/chat";
+import { registerEmbeddingsRoutes } from "./routes/embeddings";
+import { registerHealthRoutes } from "./routes/health";
+import { registerModelsRoutes } from "./routes/models";
+import { ChatService } from "./services/chat.service";
+import { EmbeddingsService } from "./services/embeddings.service";
+import { ModelResolver } from "./services/model-resolver";
+import { normalizeError, toErrorResponse } from "./utils/errors";
+import { logger } from "./utils/logger";
+
+type BuildAppOptions = {
+  env: Env;
+  chatService: ChatService;
+  embeddingsService: EmbeddingsService;
+  modelResolver: ModelResolver;
+};
+
+export function buildApp(options: BuildAppOptions) {
+  const app = Fastify({
+    logger,
+    trustProxy: true,
+    requestIdHeader: "x-request-id",
+    genReqId: (request) =>
+      (typeof request.headers["x-request-id"] === "string" && request.headers["x-request-id"]) ||
+      randomUUID(),
+  });
+
+  const requireAuth = createRequireAuth(options.env.JWT_KEY);
+
+  app.register(cookie);
+  app.register(rateLimit, {
+    global: true,
+    max: options.env.RATE_LIMIT_MAX,
+    timeWindow: options.env.RATE_LIMIT_WINDOW,
+    errorResponseBuilder: () => ({
+      error: {
+        message: "Rate limit exceeded",
+        type: "rate_limit_error",
+        param: null,
+        code: "rate_limit_exceeded",
+      },
+    }),
+  });
+
+  app.setNotFoundHandler((_request, reply) => {
+    reply.code(404).send({
+      error: {
+        message: "Route not found",
+        type: "invalid_request_error",
+        param: null,
+        code: "route_not_found",
+      },
+    });
+  });
+
+  app.setErrorHandler((error, request, reply) => {
+    const normalized = normalizeError(error);
+
+    if (normalized.statusCode >= 500) {
+      request.log.error({ err: error }, "request failed");
+    } else {
+      request.log.warn({ err: error }, "request failed");
+    }
+
+    reply.code(normalized.statusCode).send(toErrorResponse(normalized));
+  });
+
+  registerHealthRoutes(app, options.env.SERVICE_NAME);
+  registerModelsRoutes(app, options.modelResolver);
+  registerChatRoutes(app, options.chatService, requireAuth);
+  registerEmbeddingsRoutes(app, options.embeddingsService, requireAuth);
+
+  return app;
+}

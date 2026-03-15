@@ -1,0 +1,77 @@
+import type { FastifyReply, FastifyRequest } from "fastify";
+import jwt, { JwtPayload } from "jsonwebtoken";
+import { authError } from "../utils/errors";
+
+type JwtUserPayload = JwtPayload & {
+  id?: string;
+  email?: string;
+  tenant_id?: string;
+  tenantId?: string;
+  isVerified?: boolean;
+  isAdmin?: boolean;
+};
+
+function readBearerToken(request: FastifyRequest): string | undefined {
+  const authorization = request.headers.authorization;
+  if (!authorization || !authorization.startsWith("Bearer ")) {
+    return undefined;
+  }
+
+  return authorization.slice("Bearer ".length).trim() || undefined;
+}
+
+function readSessionCookieToken(request: FastifyRequest): string | undefined {
+  const cookieValue = request.cookies.session;
+  if (!cookieValue) {
+    return undefined;
+  }
+
+  try {
+    const decoded = Buffer.from(cookieValue, "base64").toString("utf8");
+    const session = JSON.parse(decoded) as { jwt?: unknown };
+    return typeof session.jwt === "string" ? session.jwt : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function createRequireAuth(jwtKey: string) {
+  return async function requireAuth(
+    request: FastifyRequest,
+    _reply: FastifyReply,
+  ) {
+    const token = readBearerToken(request) || readSessionCookieToken(request);
+    if (!token) {
+      throw authError("Missing Bearer token or session cookie");
+    }
+
+    let payload: JwtUserPayload;
+
+    try {
+      payload = jwt.verify(token, jwtKey) as JwtUserPayload;
+    } catch (error: any) {
+      if (error?.name === "TokenExpiredError") {
+        throw authError("JWT expired");
+      }
+
+      throw authError("Invalid JWT");
+    }
+
+    const userId = payload.id || payload.sub;
+    const tenantId = payload.tenant_id || payload.tenantId;
+
+    if (!userId || !tenantId) {
+      throw authError("JWT missing required id or tenant_id claim");
+    }
+
+    request.currentUser = {
+      ...payload,
+      id: String(userId),
+      email: payload.email ? String(payload.email) : undefined,
+      tenant_id: String(tenantId),
+      tenantId: String(tenantId),
+      isVerified: payload.isVerified,
+      isAdmin: payload.isAdmin,
+    };
+  };
+}

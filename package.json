@@ -1,0 +1,37 @@
+{
+  "name": "llm-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agumbe compatibility-first LLM gateway with OpenAI- and Anthropic-compatible routing.",
+  "main": "dist/server.js",
+  "scripts": {
+    "start": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "npm start",
+    "build": "tsc -p tsconfig.json",
+    "start:prod": "node dist/server.js",
+    "test": "node --test",
+    "test:ci": "node --test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/rate-limit": "^10.2.1",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "node-rdkafka": "^3.6.0",
+    "openai": "^5.9.2",
+    "pino": "^9.5.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.8",
+    "@types/node": "^22.10.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

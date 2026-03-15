@@ -1,0 +1,25 @@
+FROM node:24-alpine
+
+RUN apk add --update --no-cache python3 make g++ bash openssl-dev
+
+# For development CI
+ENV CI=true
+
+RUN apk update
+
+WORKDIR /app
+
+# Node 24 Alpine native module header resolution
+ENV npm_config_disturl=https://nodejs.org/download/release
+
+COPY package.json ./
+COPY package-lock.json* ./
+
+ENV CPPFLAGS=-I/usr/local/opt/openssl/include
+ENV LDFLAGS=-L/usr/local/opt/openssl/lib
+
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+COPY ./ ./
+
+CMD ["npm", "start"]

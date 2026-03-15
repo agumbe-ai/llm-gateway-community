@@ -1,0 +1,71 @@
+import mongoose from "mongoose";
+
+export type RequestLogRecord = {
+  tenantId: string;
+  userId: string;
+  requestId: string;
+  requestKind: "chat" | "embeddings";
+  requestedModel: string;
+  provider: string;
+  upstreamModel: string;
+  status: "success" | "error";
+  latencyMs: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCost: number;
+  errorCode?: string;
+  createdAt: Date;
+  requestPayload?: unknown;
+  responsePayload?: unknown;
+};
+
+type RequestLogDocument = mongoose.Document & RequestLogRecord;
+
+const requestLogSchema = new mongoose.Schema<RequestLogDocument>(
+  {
+    tenantId: { type: String, required: true, index: true },
+    userId: { type: String, required: true, index: true },
+    requestId: { type: String, required: true, index: true },
+    requestKind: { type: String, enum: ["chat", "embeddings"], required: true },
+    requestedModel: { type: String, required: true },
+    provider: { type: String, required: true },
+    upstreamModel: { type: String, required: true },
+    status: { type: String, enum: ["success", "error"], required: true },
+    latencyMs: { type: Number, required: true },
+    promptTokens: { type: Number, required: true },
+    completionTokens: { type: Number, required: true },
+    totalTokens: { type: Number, required: true },
+    estimatedCost: { type: Number, required: true },
+    errorCode: { type: String },
+    createdAt: { type: Date, required: true, default: Date.now },
+    requestPayload: { type: mongoose.Schema.Types.Mixed },
+    responsePayload: { type: mongoose.Schema.Types.Mixed },
+  },
+  {
+    collection: "llm_requests",
+    versionKey: false,
+  },
+);
+
+requestLogSchema.index({ tenantId: 1, createdAt: -1 });
+
+const RequestLogModel =
+  (mongoose.models.LLMRequestLog as mongoose.Model<RequestLogDocument> | undefined) ||
+  mongoose.model<RequestLogDocument>("LLMRequestLog", requestLogSchema);
+
+export class RequestLogService {
+  constructor(private readonly storePayloads: boolean) {}
+
+  async log(record: RequestLogRecord): Promise<void> {
+    const payload = this.storePayloads
+      ? record
+      : {
+          ...record,
+          requestPayload: undefined,
+          responsePayload: undefined,
+        };
+
+    await RequestLogModel.create(payload);
+  }
+}
