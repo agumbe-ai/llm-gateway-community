@@ -106,6 +106,7 @@ Common runtime:
 
 - `PORT` default `3000`
 - `SERVICE_NAME` default `llm-gateway`
+- `CORS_ALLOWED_ORIGINS` default `https://agumbe.ai`
 - `REQUEST_TIMEOUT_MS` default `30000`
 - `RATE_LIMIT_MAX` default `60`
 - `RATE_LIMIT_WINDOW` default `1 minute`
@@ -148,6 +149,8 @@ npm start
 ```
 
 If you do not want Kafka locally, keep `KAFKA_ENABLED=false`.
+
+If browser code hosted on `agumbe.ai` calls `api.agumbe.ai` directly, keep `CORS_ALLOWED_ORIGINS=https://agumbe.ai`. Multiple allowed origins can be supplied as a comma-separated list.
 
 ## Build and run
 

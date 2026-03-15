@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Env } from "./config/env";
 import { createRequireAuth } from "./middleware/requireAuth";
 import { registerChatRoutes } from "./routes/chat";
@@ -21,6 +22,23 @@ type BuildAppOptions = {
   modelResolver: ModelResolver;
 };
 
+const CORS_ALLOWED_HEADERS = "authorization, content-type, x-request-id";
+const CORS_ALLOWED_METHODS = "GET,HEAD,POST,OPTIONS";
+
+function applyCorsHeaders(request: FastifyRequest, reply: FastifyReply, allowedOrigins: Set<string>) {
+  const origin = request.headers.origin;
+  if (!origin || !allowedOrigins.has(origin)) {
+    return false;
+  }
+
+  reply.header("Access-Control-Allow-Origin", origin);
+  reply.header("Access-Control-Allow-Credentials", "true");
+  reply.header("Access-Control-Allow-Methods", CORS_ALLOWED_METHODS);
+  reply.header("Access-Control-Allow-Headers", CORS_ALLOWED_HEADERS);
+  reply.header("Vary", "Origin");
+  return true;
+}
+
 export function buildApp(options: BuildAppOptions) {
   const app = Fastify({
     logger: loggerOptions,
@@ -32,6 +50,7 @@ export function buildApp(options: BuildAppOptions) {
   });
 
   const requireAuth = createRequireAuth(options.env.JWT_KEY);
+  const allowedOrigins = new Set(options.env.CORS_ALLOWED_ORIGINS);
 
   app.register(cookie);
   app.register(rateLimit, {
@@ -69,6 +88,26 @@ export function buildApp(options: BuildAppOptions) {
     }
 
     reply.code(normalized.statusCode).send(toErrorResponse(normalized));
+  });
+
+  app.addHook("onRequest", async (request, reply) => {
+    const corsApplied = applyCorsHeaders(request, reply, allowedOrigins);
+
+    if (request.method === "OPTIONS") {
+      if (request.headers.origin && !corsApplied) {
+        reply.code(403).send({
+          error: {
+            message: "Origin not allowed",
+            type: "authentication_error",
+            param: null,
+            code: "cors_origin_denied",
+          },
+        });
+        return;
+      }
+
+      reply.code(204).send();
+    }
   });
 
   registerHealthRoutes(app, options.env.SERVICE_NAME);
