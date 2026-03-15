@@ -6,6 +6,25 @@ type PlaygroundConfig = {
   pricing: ModelPricing;
 };
 
+function iconSvg(name: string) {
+  const common = 'xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"';
+
+  const icons: Record<string, string> = {
+    eye: `<svg ${common}><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle></svg>`,
+    eyeOff: `<svg ${common}><path d="M10.733 5.076A10.744 10.744 0 0 1 12 5c4.596 0 8.51 2.957 9.938 7a10.717 10.717 0 0 1-1.271 2.592"></path><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"></path><path d="M17.479 17.499A10.75 10.75 0 0 1 12 19c-4.596 0-8.51-2.957-9.938-7a10.75 10.75 0 0 1 4.421-5.29"></path><path d="m2 2 20 20"></path></svg>`,
+    copy: `<svg ${common}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
+    history: `<svg ${common}><path d="M3 3v5h5"></path><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"></path><path d="M12 7v5l4 2"></path></svg>`,
+    arrowLeft: `<svg ${common}><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg>`,
+    logOut: `<svg ${common}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg>`,
+    user: `<svg ${common}><path d="M19 21a7 7 0 0 0-14 0"></path><circle cx="12" cy="8" r="4"></circle></svg>`,
+    keyRound: `<svg ${common}><path d="M2.5 21a5.5 5.5 0 1 1 5.5-5.5L18 5.5a2.12 2.12 0 1 1 3 3L11 18.5V21H8.5v-2.5H6V16H3.5v-2.5l1.2-1.2"></path></svg>`,
+    chevronDown: `<svg ${common}><path d="m6 9 6 6 6-6"></path></svg>`,
+    appWindow: `<svg ${common}><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M10 4v16"></path><path d="M2 8h20"></path></svg>`,
+  };
+
+  return icons[name] || "";
+}
+
 function createSessionCookie(token: string) {
   return `session=${Buffer.from(JSON.stringify({ jwt: token })).toString("base64")}`;
 }
@@ -133,6 +152,13 @@ async function callAuth(
 
 function createPlaygroundHtml(config: PlaygroundConfig) {
   const bootstrap = JSON.stringify(config).replace(/</g, "\\u003c");
+  const eyeIcon = iconSvg("eye");
+  const eyeOffIcon = iconSvg("eyeOff");
+  const copyIcon = iconSvg("copy");
+  const historyIcon = iconSvg("history");
+  const keyIcon = iconSvg("keyRound");
+  const logoutIcon = iconSvg("logOut");
+  const chevronDownIcon = iconSvg("chevronDown");
 
   return `<!doctype html>
 <html lang="en">
@@ -413,6 +439,27 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        gap: 8px;
+      }
+
+      .icon {
+        flex: 0 0 auto;
+      }
+
+      .button-text {
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
       }
 
       button:hover,
@@ -614,12 +661,12 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
         <div class="hero-top">
           <span class="eyebrow">Agumbe Playground</span>
           <div class="hero-actions">
-            <a class="ghost button-link" href="/playground/auth">Open Sign In & Tokens</a>
+            <a class="ghost button-link" href="/playground/auth">${keyIcon}<span class="button-text">Open Sign In & Tokens</span></a>
             <div id="accountMenuShell" class="menu-shell hidden">
-              <button id="accountMenuButton" class="secondary" type="button">Account</button>
+              <button id="accountMenuButton" class="secondary" type="button"><span class="button-text">Account</span>${chevronDownIcon}</button>
               <div id="accountMenuPanel" class="menu-panel hidden">
                 <div id="accountMenuCard" class="menu-card"></div>
-                <button id="logoutButton" class="secondary menu-item" type="button">Log Out</button>
+                <button id="logoutButton" class="secondary menu-item" type="button">${logoutIcon}<span class="button-text">Log Out</span></button>
               </div>
             </div>
           </div>
@@ -655,7 +702,7 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
               <label>
                 <span class="field-header">
                   <span>Active Bearer Token</span>
-                  <button id="toggleTokenVisibility" class="ghost icon-button" type="button" aria-label="Show token" title="Show token">Eye</button>
+                  <button id="toggleTokenVisibility" class="ghost icon-button" type="button" aria-label="Show token" title="Show token">${eyeIcon}<span class="sr-only">Show token</span></button>
                 </span>
                 <textarea id="token" class="token masked" placeholder="Paste a JWT or generated app token here"></textarea>
               </label>
@@ -721,7 +768,7 @@ How does Argo CD work?</textarea>
           <div>
             <div class="toolbar">
               <p class="section-title">Assistant Preview</p>
-              <button id="copyAssistant" class="ghost" type="button">Copy Response</button>
+              <button id="copyAssistant" class="ghost" type="button">${copyIcon}<span class="button-text">Copy Response</span></button>
             </div>
             <div id="assistant" class="assistant empty">Run a chat request to see the assistant response here.</div>
           </div>
@@ -745,7 +792,7 @@ How does Argo CD work?</textarea>
           <div>
             <div class="recent-header">
               <p class="section-title">Recent Requests</p>
-              <button id="clearHistory" class="ghost" type="button">Clear History</button>
+              <button id="clearHistory" class="ghost" type="button">${historyIcon}<span class="button-text">Clear History</span></button>
             </div>
             <div id="recentRequests" class="recent-list">
               <div class="recent-item">
@@ -765,6 +812,10 @@ How does Argo CD work?</textarea>
 
     <script>
       const config = ${bootstrap};
+      const icons = {
+        eye: ${JSON.stringify(eyeIcon)},
+        eyeOff: ${JSON.stringify(eyeOffIcon)}
+      };
       const storageKeys = {
         activeToken: "agumbe-llm-playground-token",
         sessionJwt: "agumbe-llm-playground-session-jwt",
@@ -904,7 +955,7 @@ How does Argo CD work?</textarea>
         }
 
         accountMenuShell.classList.remove("hidden");
-        accountMenuButton.textContent = initialsFromClaims(claims);
+        accountMenuButton.innerHTML = '<span class="button-text">' + escapeHtml(initialsFromClaims(claims)) + '</span>' + ${JSON.stringify(chevronDownIcon)};
         accountMenuCard.innerHTML = [
           '<strong>' + escapeHtml(claims.email || claims.owner_user || claims.client_key || "Signed in") + '</strong>',
           '<div class="menu-meta">',
@@ -1312,7 +1363,7 @@ How does Argo CD work?</textarea>
 
       toggleTokenVisibilityButton.addEventListener("click", () => {
         const isMasked = tokenInput.classList.toggle("masked");
-        toggleTokenVisibilityButton.textContent = isMasked ? "Eye" : "Hide";
+        toggleTokenVisibilityButton.innerHTML = (isMasked ? icons.eye : icons.eyeOff) + '<span class="sr-only">' + (isMasked ? "Show token" : "Hide token") + '</span>';
         toggleTokenVisibilityButton.setAttribute("aria-label", isMasked ? "Show token" : "Hide token");
         toggleTokenVisibilityButton.setAttribute("title", isMasked ? "Show token" : "Hide token");
       });
@@ -1331,6 +1382,12 @@ How does Argo CD work?</textarea>
 
 function createPlaygroundAuthHtml(config: PlaygroundConfig) {
   const bootstrap = JSON.stringify(config).replace(/</g, "\\u003c");
+  const arrowLeftIcon = iconSvg("arrowLeft");
+  const logoutIcon = iconSvg("logOut");
+  const userIcon = iconSvg("user");
+  const keyIcon = iconSvg("keyRound");
+  const chevronDownIcon = iconSvg("chevronDown");
+  const appWindowIcon = iconSvg("appWindow");
 
   return `<!doctype html>
 <html lang="en">
@@ -1393,7 +1450,12 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
       .button-link {
         border:1px solid rgba(129,69,255,0.14); border-radius:999px; padding:12px 18px; cursor:pointer;
         transition: transform 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
-        text-decoration:none; display:inline-flex; align-items:center; justify-content:center;
+        text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      }
+      .icon { flex: 0 0 auto; }
+      .button-text { display:inline-flex; align-items:center; }
+      .sr-only {
+        position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0;
       }
       button:hover, .button-link:hover { transform: translateY(-1px); }
       button:disabled { cursor:wait; opacity:0.65; }
@@ -1491,13 +1553,13 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         <div class="hero-top">
           <span class="eyebrow">Agumbe Playground Auth</span>
           <div class="hero-actions">
-            <a class="secondary button-link" href="/playground">Back to Playground</a>
+            <a class="secondary button-link" href="/playground">${arrowLeftIcon}<span class="button-text">Back to Playground</span></a>
             <div id="authAccountMenuShell" class="menu-shell hidden">
-              <button id="authAccountMenuButton" class="secondary" type="button">Account</button>
+              <button id="authAccountMenuButton" class="secondary" type="button"><span class="button-text">Account</span>${chevronDownIcon}</button>
               <div id="authAccountMenuPanel" class="menu-panel hidden">
                 <div id="authAccountMenuCard" class="menu-card"></div>
-                <button id="switchAccountMenuButton" class="ghost menu-item" type="button">Switch Account</button>
-                <button id="signOutMenuButton" class="secondary menu-item" type="button">Log Out</button>
+                <button id="switchAccountMenuButton" class="ghost menu-item" type="button">${userIcon}<span class="button-text">Switch Account</span></button>
+                <button id="signOutMenuButton" class="secondary menu-item" type="button">${logoutIcon}<span class="button-text">Log Out</span></button>
               </div>
             </div>
           </div>
@@ -1532,7 +1594,7 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
             <div class="actions">
               <button id="signIn" class="primary" type="button">Sign In</button>
               <button id="signUp" class="accent" type="button">Sign Up</button>
-              <button id="googleOauth" class="ghost" type="button">Continue with Google</button>
+              <button id="googleOauth" class="ghost" type="button">${userIcon}<span class="button-text">Continue with Google</span></button>
             </div>
           </div>
           <div id="identity" class="identity" style="margin-top:12px;">
@@ -1561,7 +1623,7 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
             </label>
           </div>
           <div class="actions">
-            <button id="createAppToken" class="accent" type="button">Create App Token</button>
+            <button id="createAppToken" class="accent" type="button">${keyIcon}<span class="button-text">Create App Token</span></button>
           </div>
           <div id="appsList" class="apps-list"></div>
           <div id="tokenResult" class="token-result" style="margin-top:12px;">
@@ -1574,9 +1636,9 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           <p class="section-title">Step 3 · Use In Playground</p>
           <p class="step-copy">Choose which credential should be active in the main playground, then go back and start testing requests.</p>
           <div class="actions">
-            <button id="useSessionJwt" class="secondary" type="button">Use Session JWT</button>
-            <button id="useAppToken" class="secondary" type="button">Use App Token</button>
-            <a class="ghost button-link" href="/playground">Back to Playground</a>
+            <button id="useSessionJwt" class="secondary" type="button">${userIcon}<span class="button-text">Use Session JWT</span></button>
+            <button id="useAppToken" class="secondary" type="button">${keyIcon}<span class="button-text">Use App Token</span></button>
+            <a class="ghost button-link" href="/playground">${arrowLeftIcon}<span class="button-text">Back to Playground</span></a>
           </div>
           <div class="mini-hint" style="margin-top: 10px;">The selected token is stored in this browser session and automatically picked up by the main playground page.</div>
         </div>
@@ -1698,7 +1760,7 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
 
         const primaryLabel = claims.email || claims.owner_user || claims.client_key || "Signed in";
         const avatar = initialsFromClaims(claims);
-        authAccountMenuButton.textContent = avatar;
+        authAccountMenuButton.innerHTML = '<span class="button-text">' + escapeHtml(avatar) + '</span>' + ${JSON.stringify(chevronDownIcon)};
         authAccountMenuCard.innerHTML = [
           '<strong>' + escapeHtml(primaryLabel) + '</strong>',
           '<div class="menu-meta">',
@@ -1738,7 +1800,7 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           '</select>',
           '</label>',
           '<div class="actions">',
-          '<button id="useExistingAppButton" class="ghost" type="button">Use Selected App In Playground</button>',
+          '<button id="useExistingAppButton" class="ghost" type="button">${appWindowIcon}<span class="button-text">Use Selected App In Playground</span></button>',
           '</div>',
           '<div class="mini-hint">This mints a fresh access token for the selected tenant app and makes it the active playground credential.</div>'
         ].join("");
