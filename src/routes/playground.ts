@@ -283,14 +283,14 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
         color: var(--muted);
       }
 
-      input,
+      input:not([type="checkbox"]),
       select,
       textarea,
       button {
         font: inherit;
       }
 
-      input,
+      input:not([type="checkbox"]),
       select,
       textarea {
         width: 100%;
@@ -327,6 +327,13 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
+      }
+
+      .auth-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 12px;
       }
 
       .preset-grid {
@@ -529,10 +536,10 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
     <main>
       <section class="hero">
         <span class="eyebrow">Agumbe Playground</span>
-        <h1>Test the gateway like a customer would.</h1>
+        <h1>Sits between applications and AI models.</h1>
         <p>
-          Sign in with your Agumbe account, mint an app token from the existing auth flow, run
-          chat or embeddings requests, and inspect both the assistant output and usage economics.
+          Sits between applications and AI models (OpenAI, Anthropic, Gemini, etc.), providing a unified
+          interface for routing, authentication, governance and cost management.
         </p>
       </section>
 
@@ -552,6 +559,14 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
             <p class="section-title">Sign In</p>
             <div class="grid cols-2">
               <label>
+                First Name
+                <input id="signupFirstName" type="text" placeholder="Santosh" />
+              </label>
+              <label>
+                Last Name
+                <input id="signupLastName" type="text" placeholder="Kumar" />
+              </label>
+              <label>
                 Email
                 <input id="signinEmail" type="email" placeholder="you@agumbe.ai" />
               </label>
@@ -560,14 +575,16 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
                 <input id="signinPassword" type="password" placeholder="Password" />
               </label>
             </div>
-            <div class="actions" style="margin-top: 12px;">
+            <div class="auth-actions">
               <button id="signIn" class="primary" type="button">Sign In</button>
+              <button id="signUp" class="accent" type="button">Sign Up</button>
+              <button id="googleOauth" class="ghost" type="button">Continue with Google</button>
               <button id="useSessionJwt" class="secondary" type="button">Use Session JWT</button>
             </div>
             <div id="identity" class="identity" style="margin-top: 12px;">
               <strong>No active session yet.</strong>
               <div class="identity-meta">
-                <span class="mini-hint">Sign in here to mint a JWT through the existing auth service and reuse it in the playground.</span>
+                <span class="mini-hint">Sign in, sign up, or bounce through Google OAuth to mint a JWT through the existing auth service and reuse it in the playground.</span>
               </div>
             </div>
           </div>
@@ -720,6 +737,8 @@ How does Argo CD work?</textarea>
       };
 
       const tokenInput = document.getElementById("token");
+      const signupFirstNameInput = document.getElementById("signupFirstName");
+      const signupLastNameInput = document.getElementById("signupLastName");
       const signinEmailInput = document.getElementById("signinEmail");
       const signinPasswordInput = document.getElementById("signinPassword");
       const modeInput = document.getElementById("mode");
@@ -747,6 +766,8 @@ How does Argo CD work?</textarea>
       const clearOutputButton = document.getElementById("clearOutput");
       const clearHistoryButton = document.getElementById("clearHistory");
       const signInButton = document.getElementById("signIn");
+      const signUpButton = document.getElementById("signUp");
+      const googleOauthButton = document.getElementById("googleOauth");
       const useSessionJwtButton = document.getElementById("useSessionJwt");
       const createAppTokenButton = document.getElementById("createAppToken");
       const useAppTokenButton = document.getElementById("useAppToken");
@@ -815,7 +836,7 @@ How does Argo CD work?</textarea>
 
       function renderIdentity(claims, sourceLabel) {
         if (!claims) {
-          identity.innerHTML = '<strong>No active session yet.</strong><div class="identity-meta"><span class="mini-hint">Sign in here to mint a JWT through the existing auth service and reuse it in the playground.</span></div>';
+          identity.innerHTML = '<strong>No active session yet.</strong><div class="identity-meta"><span class="mini-hint">Sign in, sign up, or use Google OAuth to mint a JWT through the existing auth service and reuse it in the playground.</span></div>';
           return;
         }
 
@@ -992,6 +1013,33 @@ How does Argo CD work?</textarea>
         );
       }
 
+      function consumeOAuthResult() {
+        const url = new URL(window.location.href);
+        const statusValue = url.searchParams.get("status");
+        const provider = url.searchParams.get("provider");
+        const jwt = url.searchParams.get("jwt");
+        const message = url.searchParams.get("message");
+
+        if (!statusValue || !provider) {
+          return;
+        }
+
+        if (statusValue === "success" && jwt) {
+          state.sessionJwt = jwt;
+          sessionStorage.setItem(storageKeys.sessionJwt, jwt);
+          tokenInput.value = jwt;
+          persistActiveToken();
+          renderIdentity(decodeJwt(jwt), provider + " OAuth");
+          setStatus("Signed in with " + provider + ".");
+          setJson({ data: { provider, claims: decodeJwt(jwt) } });
+        } else if (statusValue === "error") {
+          setStatus(message || (provider + " sign-in failed."));
+          setJson({ error: { message: message || (provider + " sign-in failed.") } });
+        }
+
+        window.history.replaceState({}, document.title, url.pathname);
+      }
+
       async function callApi(path, payload, requiresAuth, overrideToken) {
         const token = (overrideToken || tokenInput.value).trim();
         if (requiresAuth && !token) {
@@ -1113,6 +1161,42 @@ How does Argo CD work?</textarea>
         } finally {
           signInButton.disabled = false;
         }
+      });
+
+      signUpButton.addEventListener("click", async () => {
+        signUpButton.disabled = true;
+        setStatus("Creating account...");
+        try {
+          const firstName = signupFirstNameInput.value.trim();
+          const lastName = signupLastNameInput.value.trim();
+
+          if (!firstName || !lastName) {
+            throw new Error("First name and last name are required for signup.");
+          }
+
+          const data = await callApi("/api/v1/playground/auth/signup", {
+            email: signinEmailInput.value.trim(),
+            password: signinPasswordInput.value,
+            first_name: firstName,
+            last_name: lastName,
+          }, false);
+
+          setJson(data);
+          setStatus("Signup submitted. Check email verification before signing in.");
+        } catch (error) {
+          setStatus(error.message);
+          setJson({ error: { message: error.message } });
+        } finally {
+          signUpButton.disabled = false;
+        }
+      });
+
+      googleOauthButton.addEventListener("click", () => {
+        const redirectUri = window.location.origin + window.location.pathname;
+        const oauthUrl = config.authBaseUrl +
+          "/api/v1/users/auth/google?redirect_uri=" +
+          encodeURIComponent(redirectUri);
+        window.location.href = oauthUrl;
       });
 
       useSessionJwtButton.addEventListener("click", () => {
@@ -1314,6 +1398,7 @@ How does Argo CD work?</textarea>
       renderRecentRequests();
       renderUsage(null);
       syncMode();
+      consumeOAuthResult();
     </script>
   </body>
 </html>`;
@@ -1372,6 +1457,52 @@ export function registerPlaygroundRoutes(app: FastifyInstance, env: Env) {
         claims: decodeJwtPayload(token),
         user: result.data?.data || result.data?.currentUser || null,
       },
+    });
+  });
+
+  app.post("/api/v1/playground/auth/signup", async (request, reply) => {
+    const body = (request.body || {}) as Record<string, unknown>;
+    const email = typeof body.email === "string" ? body.email.trim() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const firstName = typeof body.first_name === "string" ? body.first_name.trim() : "";
+    const lastName = typeof body.last_name === "string" ? body.last_name.trim() : "";
+
+    if (!email || !password || !firstName || !lastName) {
+      reply.code(400).send({
+        error: {
+          message: "first_name, last_name, email, and password are required",
+        },
+      });
+      return;
+    }
+
+    const result = await callAuth(env.AUTH_BASE_URL, "/api/v1/users/signup", {
+      body: {
+        email,
+        password,
+        first_name: firstName,
+        last_name: lastName,
+        legal: {
+          terms_accepted: true,
+          privacy_accepted: true,
+          terms_version: "playground-v1",
+          privacy_version: "playground-v1",
+        },
+      },
+    });
+
+    if (!result.ok) {
+      reply.code(result.status).send({
+        error: {
+          message: getErrorMessage(result.data, "Signup failed"),
+        },
+      });
+      return;
+    }
+
+    reply.code(201).send({
+      data: result.data?.data || null,
+      message: result.data?.msg || "Verification email sent",
     });
   });
 

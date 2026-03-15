@@ -162,7 +162,9 @@ For internal testing, the gateway also exposes a browser playground at `/playgro
 
 The playground now supports:
 
+- email/password signup with verification-email handoff
 - email/password sign-in through the existing auth service
+- Google OAuth return-to-playground flow
 - app token creation using the existing `/app/register` + `/app/token` flow
 - local recent-request history
 - per-run usage and estimated cost summaries
