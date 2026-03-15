@@ -3,6 +3,8 @@ import { getEnv } from "./config/env";
 import { AnthropicProviderAdapter } from "./providers/anthropic";
 import { GeminiProviderAdapter } from "./providers/gemini";
 import { OpenAIProviderAdapter } from "./providers/openai";
+import { BillingGuardService } from "./services/billing-guard.service";
+import { BillingUsageEmitterService } from "./services/billing-usage-emitter.service";
 import { ChatService } from "./services/chat.service";
 import { EmbeddingsService } from "./services/embeddings.service";
 import { KafkaService } from "./services/kafka";
@@ -22,7 +24,15 @@ async function start() {
 
   const requestLogService = new RequestLogService(env.STORE_LLM_PAYLOADS);
   const usageEmitter = new UsageEmitterService(kafkaService, env.KAFKA_TOPIC_USAGE);
+  const billingUsageEmitter = new BillingUsageEmitterService(kafkaService, env.KAFKA_TOPIC_BILLING);
   const modelResolver = new ModelResolver();
+  const billingGuardService = new BillingGuardService({
+    enabled: env.BILLING_ENFORCEMENT_ENABLED,
+    tenantsBaseUrl: env.TENANTS_BASE_URL,
+    timeoutMs: env.BILLING_TIMEOUT_MS,
+    billingPricing: env.BILLING_PRICING,
+    defaultChatMaxCompletionTokens: env.BILLING_CHAT_DEFAULT_MAX_TOKENS,
+  });
 
   const providers = {
     openai: new OpenAIProviderAdapter(env.OPENAI_API_KEY),
@@ -35,6 +45,8 @@ async function start() {
     modelResolver,
     requestLogService,
     usageEmitter,
+    billingGuardService,
+    billingUsageEmitter,
     modelPricing: env.MODEL_PRICING,
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
   });
@@ -44,6 +56,8 @@ async function start() {
     modelResolver,
     requestLogService,
     usageEmitter,
+    billingGuardService,
+    billingUsageEmitter,
     modelPricing: env.MODEL_PRICING,
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
   });

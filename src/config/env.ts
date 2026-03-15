@@ -26,12 +26,14 @@ export type Env = {
   LOG_LEVEL: string;
   CORS_ALLOWED_ORIGINS: string[];
   AUTH_BASE_URL: string;
+  TENANTS_BASE_URL?: string;
   MONGO_URI: string;
   JWT_KEY: string;
   KAFKA_ENABLED: boolean;
   KAFKA_BROKERS: string[];
   KAFKA_CLIENT_ID: string;
   KAFKA_TOPIC_USAGE: string;
+  KAFKA_TOPIC_BILLING?: string;
   KAFKA_PROTOCOL?: string;
   KAFKA_MECHANISMS?: string;
   KAFKA_USERNAME?: string;
@@ -44,6 +46,10 @@ export type Env = {
   RATE_LIMIT_MAX: number;
   RATE_LIMIT_WINDOW: string;
   STORE_LLM_PAYLOADS: boolean;
+  BILLING_ENFORCEMENT_ENABLED: boolean;
+  BILLING_TIMEOUT_MS: number;
+  BILLING_CHAT_DEFAULT_MAX_TOKENS: number;
+  BILLING_PRICING: ModelPricing;
   MODEL_PRICING: ModelPricing;
 };
 
@@ -70,6 +76,7 @@ export function getEnv(): Env {
     LOG_LEVEL: z.string().default("info"),
     CORS_ALLOWED_ORIGINS: z.string().default("https://agumbe.ai"),
     AUTH_BASE_URL: z.string().url().default("https://development.agumbe.dev"),
+    TENANTS_BASE_URL: z.string().url().optional(),
     MONGO_URI: z.string().min(1, "MONGO_URI is required"),
     JWT_KEY: z.string().min(1, "JWT_KEY is required"),
     KAFKA_ENABLED: booleanString.default("false").transform(Boolean),
@@ -77,6 +84,7 @@ export function getEnv(): Env {
     KAFKA_SERVERS: z.string().optional(),
     KAFKA_CLIENT_ID: z.string().default("llm-gateway"),
     KAFKA_TOPIC_USAGE: z.string().default("llm_usage_raw"),
+    KAFKA_TOPIC_BILLING: z.string().optional(),
     KAFKA_PROTOCOL: z.string().optional(),
     KAFKA_MECHANISMS: z.string().optional(),
     KAFKA_USERNAME: z.string().optional(),
@@ -90,6 +98,10 @@ export function getEnv(): Env {
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
     RATE_LIMIT_WINDOW: z.string().default("1 minute"),
     STORE_LLM_PAYLOADS: booleanString.default("false").transform(Boolean),
+    BILLING_ENFORCEMENT_ENABLED: booleanString.default("false").transform(Boolean),
+    BILLING_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+    BILLING_CHAT_DEFAULT_MAX_TOKENS: z.coerce.number().int().positive().default(512),
+    BILLING_PRICING_JSON: z.string().default("{}"),
     MODEL_PRICING_JSON: z.string().default("{}"),
   });
 
@@ -100,18 +112,24 @@ export function getEnv(): Env {
     throw new Error("KAFKA_BROKERS or KAFKA_SERVERS is required when KAFKA_ENABLED=true");
   }
 
+  if (raw.BILLING_ENFORCEMENT_ENABLED && !raw.TENANTS_BASE_URL) {
+    throw new Error("TENANTS_BASE_URL is required when BILLING_ENFORCEMENT_ENABLED=true");
+  }
+
   return {
     PORT: raw.PORT,
     SERVICE_NAME: raw.SERVICE_NAME,
     LOG_LEVEL: raw.LOG_LEVEL,
     CORS_ALLOWED_ORIGINS: splitCsv(raw.CORS_ALLOWED_ORIGINS),
     AUTH_BASE_URL: raw.AUTH_BASE_URL,
+    TENANTS_BASE_URL: raw.TENANTS_BASE_URL,
     MONGO_URI: raw.MONGO_URI,
     JWT_KEY: raw.JWT_KEY,
     KAFKA_ENABLED: raw.KAFKA_ENABLED,
     KAFKA_BROKERS: brokers,
     KAFKA_CLIENT_ID: raw.KAFKA_CLIENT_ID,
     KAFKA_TOPIC_USAGE: raw.KAFKA_TOPIC_USAGE,
+    KAFKA_TOPIC_BILLING: raw.KAFKA_TOPIC_BILLING,
     KAFKA_PROTOCOL: raw.KAFKA_PROTOCOL,
     KAFKA_MECHANISMS: raw.KAFKA_MECHANISMS,
     KAFKA_USERNAME: raw.KAFKA_USERNAME,
@@ -124,6 +142,10 @@ export function getEnv(): Env {
     RATE_LIMIT_MAX: raw.RATE_LIMIT_MAX,
     RATE_LIMIT_WINDOW: raw.RATE_LIMIT_WINDOW,
     STORE_LLM_PAYLOADS: raw.STORE_LLM_PAYLOADS,
+    BILLING_ENFORCEMENT_ENABLED: raw.BILLING_ENFORCEMENT_ENABLED,
+    BILLING_TIMEOUT_MS: raw.BILLING_TIMEOUT_MS,
+    BILLING_CHAT_DEFAULT_MAX_TOKENS: raw.BILLING_CHAT_DEFAULT_MAX_TOKENS,
+    BILLING_PRICING: parsePricing(raw.BILLING_PRICING_JSON),
     MODEL_PRICING: parsePricing(raw.MODEL_PRICING_JSON),
   };
 }

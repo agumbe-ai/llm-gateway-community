@@ -2,6 +2,7 @@ import "fastify";
 
 declare module "fastify" {
   interface FastifyRequest {
+    authToken?: string;
     currentUser?: {
       id: string;
       email?: string;

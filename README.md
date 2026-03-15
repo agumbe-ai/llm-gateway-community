@@ -8,6 +8,7 @@
 - Mongo connectivity uses the same single-process Mongoose connection pattern used by nearby services
 - Kafka publishing follows the existing cached producer style used in `auth`, `tenants`, and `codegen`
 - Kubernetes manifests mirror the current `*-depl` / `*-srv` naming and `mongodb-secret` / `auth-jwt-secret` secret wiring
+- Wallet and pricebook integration now reuse the existing tenant wallet and billing-rating pipeline already running in the platform
 
 ## Endpoints
 
@@ -98,6 +99,31 @@ Success and failure both emit to `KAFKA_TOPIC_USAGE` (default `llm_usage_raw`) w
 - `errorCode`
 - `timestamp`
 
+When `KAFKA_TOPIC_BILLING` is set, successful requests also emit a second billing envelope with Kafka key `billing_usage_raw`. That envelope matches the existing tenants billing listener shape so the current pricebook and wallet-debit flow can rate and charge usage without changing the public API.
+
+## Billing enforcement
+
+`llm-gateway` can now block unpaid usage before it calls an upstream model.
+
+When `BILLING_ENFORCEMENT_ENABLED=true` the gateway will:
+
+- fetch the tenant wallet from `TENANTS_BASE_URL/api/v1/tenants/wallet` using the caller's Bearer token
+- estimate the maximum request spend from `BILLING_PRICING_JSON` and request size
+- convert the estimated billable amount into wallet denits using the tenant wallet's `denits_per_unit`
+- reject the request with `402 insufficient_credits` if the tenant balance is too low
+
+This is intentionally conservative for chat:
+
+- prompt tokens are estimated from request text length
+- completion tokens use `max_tokens` if present
+- otherwise they fall back to `BILLING_CHAT_DEFAULT_MAX_TOKENS`
+
+Current enforcement is intentionally strict:
+
+- only OpenAI models are allowed when billing enforcement is enabled
+- Anthropic and Gemini requests are rejected with `billing_provider_unavailable` until the downstream billing listener and pricebook are expanded for those meters
+- if a billable model has no entry in `BILLING_PRICING_JSON`, the request is rejected with `billing_price_unavailable` instead of running for free
+
 ## Environment variables
 
 Required:
@@ -113,10 +139,15 @@ Common runtime:
 - `SERVICE_NAME` default `llm-gateway`
 - `CORS_ALLOWED_ORIGINS` default `https://agumbe.ai`
 - `AUTH_BASE_URL` default `https://development.agumbe.dev`
+- `TENANTS_BASE_URL` for wallet checks, for example `https://development.agumbe.dev`
 - `REQUEST_TIMEOUT_MS` default `30000`
 - `RATE_LIMIT_MAX` default `60`
 - `RATE_LIMIT_WINDOW` default `1 minute`
 - `STORE_LLM_PAYLOADS` default `false`
+- `BILLING_ENFORCEMENT_ENABLED` default `false`
+- `BILLING_TIMEOUT_MS` default `5000`
+- `BILLING_CHAT_DEFAULT_MAX_TOKENS` default `512`
+- `BILLING_PRICING_JSON` billable sell-side pricing used for wallet prechecks
 
 Kafka:
 
@@ -124,6 +155,7 @@ Kafka:
 - `KAFKA_BROKERS` or `KAFKA_SERVERS`
 - `KAFKA_CLIENT_ID`
 - `KAFKA_TOPIC_USAGE`
+- optional `KAFKA_TOPIC_BILLING`
 - optional `KAFKA_PROTOCOL`
 - optional `KAFKA_MECHANISMS`
 - optional `KAFKA_USERNAME`
@@ -145,6 +177,8 @@ Optional:
   }
 }
 ```
+
+For billing enforcement, make sure every billable model you expose has an entry in `BILLING_PRICING_JSON`. A model without pricing will be denied when `BILLING_ENFORCEMENT_ENABLED=true`.
 
 ## Local development
 

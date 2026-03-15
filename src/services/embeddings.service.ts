@@ -3,6 +3,8 @@ import type { ProviderAdapter, ProviderName, ResolvedModel } from "../providers/
 import { embeddingsRequestSchema, type EmbeddingsResponse } from "../types/embeddings";
 import { normalizeError, providerError } from "../utils/errors";
 import { estimateCostUsd } from "../utils/pricing";
+import { BillingGuardService } from "./billing-guard.service";
+import { BillingUsageEmitterService } from "./billing-usage-emitter.service";
 import type { AuthenticatedRequestContext } from "./chat.service";
 import { ModelResolver } from "./model-resolver";
 import { RequestLogService } from "./request-log.service";
@@ -13,6 +15,8 @@ type EmbeddingsServiceDeps = {
   modelResolver: ModelResolver;
   requestLogService: RequestLogService;
   usageEmitter: UsageEmitterService;
+  billingGuardService: BillingGuardService;
+  billingUsageEmitter: BillingUsageEmitterService;
   modelPricing: ModelPricing;
   requestTimeoutMs: number;
 };
@@ -42,6 +46,13 @@ export class EmbeddingsService {
       const request = embeddingsRequestSchema.parse(input);
       requestedModel = request.model;
       resolvedModel = this.deps.modelResolver.resolve(request.model, "embeddings");
+      await this.deps.billingGuardService.authorize({
+        requestKind: "embeddings",
+        context,
+        model: resolvedModel,
+        request,
+        bearerToken: context.bearerToken,
+      });
 
       const adapter = this.deps.providers[resolvedModel.provider];
       if (!adapter?.embeddings) {
@@ -110,6 +121,20 @@ export class EmbeddingsService {
           latencyMs,
           status: "success",
           estimatedCost,
+          timestamp: new Date().toISOString(),
+        }),
+        this.deps.billingUsageEmitter.emit({
+          requestId: context.requestId,
+          tenantId: context.tenantId,
+          requestKind: "embeddings",
+          requestedModel: request.model,
+          provider: resolvedModel.provider,
+          upstreamModel: resolvedModel.upstreamModel,
+          promptTokens: usage.promptTokens,
+          completionTokens: 0,
+          totalTokens: usage.totalTokens,
+          latencyMs,
+          status: "success",
           timestamp: new Date().toISOString(),
         }),
       ]);

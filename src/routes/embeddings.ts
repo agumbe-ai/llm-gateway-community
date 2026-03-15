@@ -19,6 +19,7 @@ export function registerEmbeddingsRoutes(
           userId: currentUser.id,
           tenantId: currentUser.tenant_id,
           email: currentUser.email,
+          bearerToken: request.authToken!,
         },
         request.body,
       );

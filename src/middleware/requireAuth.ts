@@ -64,6 +64,7 @@ export function createRequireAuth(jwtKey: string) {
       throw authError("JWT missing required id or tenant_id claim");
     }
 
+    request.authToken = token;
     request.currentUser = {
       ...payload,
       id: String(userId),

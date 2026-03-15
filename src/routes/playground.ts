@@ -338,6 +338,13 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
         gap: 10px;
       }
 
+      .field-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+
       .auth-actions {
         display: flex;
         flex-wrap: wrap;
@@ -455,6 +462,16 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
 
       .mini-hint {
         font-size: 0.82rem;
+      }
+
+      .icon-button {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 10px 14px;
+      }
+
+      .token.masked {
+        -webkit-text-security: disc;
       }
 
       .assistant {
@@ -583,8 +600,11 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
             </div>
             <div class="grid">
               <label>
-                Active Bearer Token
-                <textarea id="token" class="token" placeholder="Paste a JWT or generated app token here"></textarea>
+                <span class="field-header">
+                  <span>Active Bearer Token</span>
+                  <button id="toggleTokenVisibility" class="ghost icon-button" type="button" aria-label="Show token" title="Show token">Eye</button>
+                </span>
+                <textarea id="token" class="token masked" placeholder="Paste a JWT or generated app token here"></textarea>
               </label>
               <p class="hint">Session JWTs and app tokens are stored only in this browser session. Recent requests are stored locally without credentials.</p>
             </div>
@@ -701,6 +721,7 @@ How does Argo CD work?</textarea>
       };
 
       const tokenInput = document.getElementById("token");
+      const toggleTokenVisibilityButton = document.getElementById("toggleTokenVisibility");
       const modeInput = document.getElementById("mode");
       const modelInput = document.getElementById("model");
       const systemPromptInput = document.getElementById("systemPrompt");
@@ -796,7 +817,7 @@ How does Argo CD work?</textarea>
           '<div class="identity-meta">',
           '<span><span class="stat-label">Source</span><br />' + escapeHtml(sourceLabel) + '</span>',
           '<span><span class="stat-label">Tenant</span><br />' + escapeHtml(claims.tenant_id || claims.tenantId || "n/a") + '</span>',
-          '<span><span class="stat-label">Subject</span><br />' + escapeHtml(claims.id || claims.sub || claims.client_key || "n/a") + '</span>',
+          '<span><span class="stat-label">User ID / JWT Subject</span><br />' + escapeHtml(claims.id || claims.sub || claims.client_key || "n/a") + '</span>',
           '</div>'
         ].join("");
       }
@@ -1191,6 +1212,13 @@ How does Argo CD work?</textarea>
         persistActiveToken();
       });
 
+      toggleTokenVisibilityButton.addEventListener("click", () => {
+        const isMasked = tokenInput.classList.toggle("masked");
+        toggleTokenVisibilityButton.textContent = isMasked ? "Eye" : "Hide";
+        toggleTokenVisibilityButton.setAttribute("aria-label", isMasked ? "Show token" : "Hide token");
+        toggleTokenVisibilityButton.setAttribute("title", isMasked ? "Show token" : "Hide token");
+      });
+
       if (state.sessionJwt) {
         renderIdentity(decodeJwt(state.sessionJwt), "Session JWT");
       }
@@ -1276,11 +1304,19 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
       .ghost { background: rgba(255,255,255,0.85); color: var(--purple); }
       .accent { background: rgba(129,69,255,0.1); color: var(--purple); }
       .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+      .field-header {
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:10px;
+      }
       .identity, .token-result {
         border-radius:20px; border:1px solid rgba(129,69,255,0.14); background:rgba(255,255,255,0.78); padding:16px;
       }
       .identity-meta { display:grid; gap:8px; }
       .mini-hint { color:var(--muted); font-size:0.82rem; }
+      .icon-button { min-width:44px; min-height:44px; padding:10px 14px; }
+      .token.masked { -webkit-text-security: disc; }
       pre {
         margin:0; padding:18px; border-radius:20px; background: linear-gradient(180deg, rgba(0,0,0,0.96), rgba(16,18,28,0.98));
         color:#f4f7ff; overflow:auto; min-height:220px; font-size:0.92rem; line-height:1.5; border:1px solid rgba(255,255,255,0.08);
@@ -1447,7 +1483,7 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           '<div class="identity-meta">',
           '<span><strong style="display:block; margin-bottom:4px;">Source</strong>' + escapeHtml(sourceLabel) + '</span>',
           '<span><strong style="display:block; margin-bottom:4px;">Tenant</strong>' + escapeHtml(claims.tenant_id || claims.tenantId || "n/a") + '</span>',
-          '<span><strong style="display:block; margin-bottom:4px;">Subject</strong>' + escapeHtml(claims.id || claims.sub || claims.client_key || "n/a") + '</span>',
+          '<span><strong style="display:block; margin-bottom:4px;">User ID / JWT Subject</strong>' + escapeHtml(claims.id || claims.sub || claims.client_key || "n/a") + '</span>',
           '</div>'
         ].join("");
       }

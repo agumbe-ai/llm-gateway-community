@@ -4,6 +4,8 @@ import type { ProviderAdapter, ProviderName, ResolvedModel } from "../providers/
 import { chatRequestSchema, type ChatCompletionResponse } from "../types/chat";
 import { normalizeError, providerError } from "../utils/errors";
 import { estimateCostUsd } from "../utils/pricing";
+import { BillingGuardService } from "./billing-guard.service";
+import { BillingUsageEmitterService } from "./billing-usage-emitter.service";
 import { ModelResolver } from "./model-resolver";
 import { RequestLogService } from "./request-log.service";
 import { UsageEmitterService } from "./usage-emitter.service";
@@ -13,6 +15,7 @@ export type AuthenticatedRequestContext = {
   userId: string;
   tenantId: string;
   email?: string;
+  bearerToken: string;
 };
 
 type ChatServiceDeps = {
@@ -20,6 +23,8 @@ type ChatServiceDeps = {
   modelResolver: ModelResolver;
   requestLogService: RequestLogService;
   usageEmitter: UsageEmitterService;
+  billingGuardService: BillingGuardService;
+  billingUsageEmitter: BillingUsageEmitterService;
   modelPricing: ModelPricing;
   requestTimeoutMs: number;
 };
@@ -49,6 +54,13 @@ export class ChatService {
       const request = chatRequestSchema.parse(input);
       requestedModel = request.model;
       resolvedModel = this.deps.modelResolver.resolve(request.model, "chat");
+      await this.deps.billingGuardService.authorize({
+        requestKind: "chat",
+        context,
+        model: resolvedModel,
+        request,
+        bearerToken: context.bearerToken,
+      });
 
       const adapter = this.deps.providers[resolvedModel.provider];
       if (!adapter?.chat) {
@@ -124,6 +136,20 @@ export class ChatService {
           latencyMs,
           status: "success",
           estimatedCost,
+          timestamp: new Date().toISOString(),
+        }),
+        this.deps.billingUsageEmitter.emit({
+          requestId: context.requestId,
+          tenantId: context.tenantId,
+          requestKind: "chat",
+          requestedModel: request.model,
+          provider: resolvedModel.provider,
+          upstreamModel: resolvedModel.upstreamModel,
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+          totalTokens: usage.totalTokens,
+          latencyMs,
+          status: "success",
           timestamp: new Date().toISOString(),
         }),
       ]);
