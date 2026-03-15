@@ -21,6 +21,10 @@
 
 Provider-qualified:
 
+- `@openai/gpt-5.4`
+- `@openai/gpt-5.3`
+- `@openai/gpt-5.2`
+- `@openai/gpt-5.1`
 - `@openai/gpt-4.1-mini`
 - `@openai/gpt-4o-mini`
 - `@openai/text-embedding-3-small`

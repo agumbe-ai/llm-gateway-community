@@ -161,7 +161,7 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        font-family: "Roboto", "Segoe UI", sans-serif;
         color: var(--ink);
         background:
           radial-gradient(circle at 18% 12%, rgba(255, 109, 63, 0.24), transparent 18rem),
