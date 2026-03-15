@@ -182,6 +182,14 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
         padding: 18px 8px 6px;
       }
 
+      .hero-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
       .eyebrow {
         display: inline-flex;
         width: fit-content;
@@ -535,7 +543,10 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
   <body>
     <main>
       <section class="hero">
-        <span class="eyebrow">Agumbe Playground</span>
+        <div class="hero-top">
+          <span class="eyebrow">Agumbe Playground</span>
+          <a class="ghost" href="/playground/auth" style="text-decoration:none; display:inline-flex; align-items:center;">Open Sign In & Tokens</a>
+        </div>
         <h1>Sits between applications and AI models.</h1>
         <p>
           Sits between applications and AI models (OpenAI, Anthropic, Gemini, etc.), providing a unified
@@ -556,67 +567,13 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
           </div>
 
           <div class="section">
-            <p class="section-title">Sign In</p>
-            <div class="grid cols-2">
-              <label>
-                First Name
-                <input id="signupFirstName" type="text" placeholder="Santosh" />
-              </label>
-              <label>
-                Last Name
-                <input id="signupLastName" type="text" placeholder="Kumar" />
-              </label>
-              <label>
-                Email
-                <input id="signinEmail" type="email" placeholder="you@agumbe.ai" />
-              </label>
-              <label>
-                Password
-                <input id="signinPassword" type="password" placeholder="Password" />
-              </label>
-            </div>
-            <div class="auth-actions">
-              <button id="signIn" class="primary" type="button">Sign In</button>
-              <button id="signUp" class="accent" type="button">Sign Up</button>
-              <button id="googleOauth" class="ghost" type="button">Continue with Google</button>
-              <button id="useSessionJwt" class="secondary" type="button">Use Session JWT</button>
-            </div>
-            <div id="identity" class="identity" style="margin-top: 12px;">
+            <p class="section-title">Connection</p>
+            <div id="identity" class="identity" style="margin-bottom: 12px;">
               <strong>No active session yet.</strong>
               <div class="identity-meta">
-                <span class="mini-hint">Sign in, sign up, or bounce through Google OAuth to mint a JWT through the existing auth service and reuse it in the playground.</span>
+                <span class="mini-hint">Open Sign In & Tokens to sign in, use Google OAuth, or mint an app token. The active token will appear here automatically.</span>
               </div>
             </div>
-          </div>
-
-          <div class="section">
-            <p class="section-title">Create App Token</p>
-            <div class="grid cols-3">
-              <label>
-                App Name
-                <input id="appName" type="text" value="Playground" />
-              </label>
-              <label>
-                Scope
-                <input id="appScope" type="text" value="llm:invoke" />
-              </label>
-              <label>
-                Purpose
-                <input id="appPurpose" type="text" value="Internal playground access" />
-              </label>
-            </div>
-            <div class="actions" style="margin-top: 12px;">
-              <button id="createAppToken" class="accent" type="button">Create App Token</button>
-              <button id="useAppToken" class="secondary" type="button">Use App Token</button>
-            </div>
-            <div id="tokenResult" class="token-result" style="margin-top: 12px;">
-              <strong>No app token created yet.</strong>
-              <div class="mini-hint">This uses the existing auth service's app register + app token flow. It is an API token, not a separate LLM-native key yet.</div>
-            </div>
-          </div>
-
-          <div class="section">
-            <p class="section-title">Connection</p>
             <div class="grid">
               <label>
                 Active Bearer Token
@@ -737,18 +694,11 @@ How does Argo CD work?</textarea>
       };
 
       const tokenInput = document.getElementById("token");
-      const signupFirstNameInput = document.getElementById("signupFirstName");
-      const signupLastNameInput = document.getElementById("signupLastName");
-      const signinEmailInput = document.getElementById("signinEmail");
-      const signinPasswordInput = document.getElementById("signinPassword");
       const modeInput = document.getElementById("mode");
       const modelInput = document.getElementById("model");
       const systemPromptInput = document.getElementById("systemPrompt");
       const userPromptInput = document.getElementById("userPrompt");
       const embeddingInput = document.getElementById("embeddingInput");
-      const appNameInput = document.getElementById("appName");
-      const appScopeInput = document.getElementById("appScope");
-      const appPurposeInput = document.getElementById("appPurpose");
       const presetButtons = Array.from(document.querySelectorAll("[data-preset]"));
       const chatSection = document.getElementById("chat-section");
       const embeddingsSection = document.getElementById("embeddings-section");
@@ -765,12 +715,6 @@ How does Argo CD work?</textarea>
       const runRequestButton = document.getElementById("runRequest");
       const clearOutputButton = document.getElementById("clearOutput");
       const clearHistoryButton = document.getElementById("clearHistory");
-      const signInButton = document.getElementById("signIn");
-      const signUpButton = document.getElementById("signUp");
-      const googleOauthButton = document.getElementById("googleOauth");
-      const useSessionJwtButton = document.getElementById("useSessionJwt");
-      const createAppTokenButton = document.getElementById("createAppToken");
-      const useAppTokenButton = document.getElementById("useAppToken");
 
       const state = {
         sessionJwt: sessionStorage.getItem(storageKeys.sessionJwt) || "",
@@ -1013,33 +957,6 @@ How does Argo CD work?</textarea>
         );
       }
 
-      function consumeOAuthResult() {
-        const url = new URL(window.location.href);
-        const statusValue = url.searchParams.get("status");
-        const provider = url.searchParams.get("provider");
-        const jwt = url.searchParams.get("jwt");
-        const message = url.searchParams.get("message");
-
-        if (!statusValue || !provider) {
-          return;
-        }
-
-        if (statusValue === "success" && jwt) {
-          state.sessionJwt = jwt;
-          sessionStorage.setItem(storageKeys.sessionJwt, jwt);
-          tokenInput.value = jwt;
-          persistActiveToken();
-          renderIdentity(decodeJwt(jwt), provider + " OAuth");
-          setStatus("Signed in with " + provider + ".");
-          setJson({ data: { provider, claims: decodeJwt(jwt) } });
-        } else if (statusValue === "error") {
-          setStatus(message || (provider + " sign-in failed."));
-          setJson({ error: { message: message || (provider + " sign-in failed.") } });
-        }
-
-        window.history.replaceState({}, document.title, url.pathname);
-      }
-
       async function callApi(path, payload, requiresAuth, overrideToken) {
         const token = (overrideToken || tokenInput.value).trim();
         if (requiresAuth && !token) {
@@ -1133,129 +1050,6 @@ How does Argo CD work?</textarea>
           message,
         };
       }
-
-      signInButton.addEventListener("click", async () => {
-        signInButton.disabled = true;
-        setStatus("Signing in...");
-        try {
-          const data = await callApi("/api/v1/playground/auth/signin", {
-            email: signinEmailInput.value.trim(),
-            password: signinPasswordInput.value,
-          }, false);
-
-          const token = data && data.data && data.data.token;
-          if (!token) {
-            throw new Error("Auth service did not return a session token.");
-          }
-
-          state.sessionJwt = token;
-          sessionStorage.setItem(storageKeys.sessionJwt, token);
-          tokenInput.value = token;
-          persistActiveToken();
-          renderIdentity(data.data.claims || decodeJwt(token), "Session JWT");
-          setJson(data);
-          setStatus("Signed in. Session JWT is now active for requests.");
-        } catch (error) {
-          setStatus(error.message);
-          setJson({ error: { message: error.message } });
-        } finally {
-          signInButton.disabled = false;
-        }
-      });
-
-      signUpButton.addEventListener("click", async () => {
-        signUpButton.disabled = true;
-        setStatus("Creating account...");
-        try {
-          const firstName = signupFirstNameInput.value.trim();
-          const lastName = signupLastNameInput.value.trim();
-
-          if (!firstName || !lastName) {
-            throw new Error("First name and last name are required for signup.");
-          }
-
-          const data = await callApi("/api/v1/playground/auth/signup", {
-            email: signinEmailInput.value.trim(),
-            password: signinPasswordInput.value,
-            first_name: firstName,
-            last_name: lastName,
-          }, false);
-
-          setJson(data);
-          setStatus("Signup submitted. Check email verification before signing in.");
-        } catch (error) {
-          setStatus(error.message);
-          setJson({ error: { message: error.message } });
-        } finally {
-          signUpButton.disabled = false;
-        }
-      });
-
-      googleOauthButton.addEventListener("click", () => {
-        const redirectUri = window.location.origin + window.location.pathname;
-        const oauthUrl = config.authBaseUrl +
-          "/api/v1/users/auth/google?redirect_uri=" +
-          encodeURIComponent(redirectUri);
-        window.location.href = oauthUrl;
-      });
-
-      useSessionJwtButton.addEventListener("click", () => {
-        if (!state.sessionJwt) {
-          setStatus("Sign in first to load a session JWT.");
-          return;
-        }
-
-        tokenInput.value = state.sessionJwt;
-        persistActiveToken();
-        renderIdentity(decodeJwt(state.sessionJwt), "Session JWT");
-        setStatus("Session JWT is now the active Bearer token.");
-      });
-
-      createAppTokenButton.addEventListener("click", async () => {
-        createAppTokenButton.disabled = true;
-        setStatus("Creating app token...");
-        try {
-          if (!state.sessionJwt) {
-            throw new Error("Sign in first so the auth service can issue an app token.");
-          }
-
-          const data = await callApi("/api/v1/playground/auth/app-token", {
-            app_name: appNameInput.value.trim(),
-            scope: appScopeInput.value.trim(),
-            purpose: appPurposeInput.value.trim(),
-          }, true, state.sessionJwt);
-
-          const accessToken = data && data.data && data.data.token && data.data.token.access_token;
-          if (!accessToken) {
-            throw new Error("Auth service did not return an access token.");
-          }
-
-          state.latestAppToken = accessToken;
-          state.latestAppBundle = data.data;
-          sessionStorage.setItem(storageKeys.latestAppToken, accessToken);
-          sessionStorage.setItem(storageKeys.latestAppBundle, JSON.stringify(data.data));
-          renderTokenResult(data.data);
-          setJson(data);
-          setStatus("App token created. Use App Token will switch request auth to the generated token.");
-        } catch (error) {
-          setStatus(error.message);
-          setJson({ error: { message: error.message } });
-        } finally {
-          createAppTokenButton.disabled = false;
-        }
-      });
-
-      useAppTokenButton.addEventListener("click", () => {
-        if (!state.latestAppToken) {
-          setStatus("Create an app token first.");
-          return;
-        }
-
-        tokenInput.value = state.latestAppToken;
-        persistActiveToken();
-        renderIdentity(decodeJwt(state.latestAppToken), "App Token");
-        setStatus("App token is now the active Bearer token.");
-      });
 
       loadModelsButton.addEventListener("click", async () => {
         loadModelsButton.disabled = true;
@@ -1398,6 +1192,398 @@ How does Argo CD work?</textarea>
       renderRecentRequests();
       renderUsage(null);
       syncMode();
+    </script>
+  </body>
+</html>`;
+}
+
+function createPlaygroundAuthHtml(config: PlaygroundConfig) {
+  const bootstrap = JSON.stringify(config).replace(/</g, "\\u003c");
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agumbe Playground Auth</title>
+    <style>
+      :root {
+        --ink: #000000;
+        --muted: #6f839b;
+        --panel: rgba(255, 255, 255, 0.9);
+        --line: rgba(129, 69, 255, 0.14);
+        --orange: #ff6d3f;
+        --purple: #8145ff;
+        --blue: #00a3ff;
+        --white: #ffffff;
+        --shadow: 0 24px 60px rgba(129, 69, 255, 0.12);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Roboto", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 18% 12%, rgba(255, 109, 63, 0.24), transparent 18rem),
+          radial-gradient(circle at 86% 18%, rgba(0, 163, 255, 0.18), transparent 20rem),
+          radial-gradient(circle at 55% 85%, rgba(129, 69, 255, 0.16), transparent 22rem),
+          linear-gradient(180deg, #cfdceb 0%, #dce8f6 22%, #f7f8fc 100%);
+      }
+      main { width: min(980px, calc(100vw - 32px)); margin: 28px auto; }
+      .hero { display: grid; gap: 14px; margin-bottom: 18px; padding: 18px 8px 6px; }
+      .hero-top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+      .eyebrow {
+        display:inline-flex; padding:6px 12px; border-radius:999px; background:rgba(129,69,255,0.08);
+        color:var(--purple); font-size:12px; letter-spacing:0.14em; text-transform:uppercase;
+        border:1px solid rgba(129,69,255,0.16);
+      }
+      h1 { margin:0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2rem, 4vw, 3.2rem); line-height:1; color:#8ea7c3; max-width:14ch; }
+      p { margin:0; color:var(--muted); }
+      .card { background: var(--panel); border:1px solid var(--line); border-radius:24px; box-shadow: var(--shadow); backdrop-filter: blur(16px); padding:22px; }
+      .section { margin-bottom:18px; }
+      .section:last-child { margin-bottom:0; }
+      .section-title { margin:0 0 10px; font-size:0.88rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+      .grid { display:grid; gap:12px; }
+      .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      label { display:grid; gap:6px; font-size:0.95rem; color:var(--muted); }
+      input:not([type="checkbox"]), textarea, button { font: inherit; }
+      input:not([type="checkbox"]), textarea {
+        width:100%; border:1px solid rgba(129,69,255,0.16); border-radius:16px; background:rgba(255,255,255,0.92);
+        padding:12px 14px; color:var(--ink); outline:none;
+      }
+      input:focus, textarea:focus { border-color: rgba(0,163,255,0.65); box-shadow: 0 0 0 4px rgba(0,163,255,0.12); }
+      button {
+        border:1px solid rgba(129,69,255,0.14); border-radius:999px; padding:12px 18px; cursor:pointer;
+        transition: transform 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
+      }
+      button:hover { transform: translateY(-1px); }
+      button:disabled { cursor:wait; opacity:0.65; }
+      .primary { background: var(--orange); color: var(--white); box-shadow: 0 14px 24px rgba(255,109,63,0.18); }
+      .secondary { background: rgba(0,163,255,0.08); color: var(--ink); text-decoration:none; display:inline-flex; align-items:center; }
+      .ghost { background: rgba(255,255,255,0.85); color: var(--purple); text-decoration:none; display:inline-flex; align-items:center; }
+      .accent { background: rgba(129,69,255,0.1); color: var(--purple); }
+      .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+      .identity, .token-result {
+        border-radius:20px; border:1px solid rgba(129,69,255,0.14); background:rgba(255,255,255,0.78); padding:16px;
+      }
+      .identity-meta { display:grid; gap:8px; }
+      .mini-hint { color:var(--muted); font-size:0.82rem; }
+      pre {
+        margin:0; padding:18px; border-radius:20px; background: linear-gradient(180deg, rgba(0,0,0,0.96), rgba(16,18,28,0.98));
+        color:#f4f7ff; overflow:auto; min-height:220px; font-size:0.92rem; line-height:1.5; border:1px solid rgba(255,255,255,0.08);
+      }
+      .status { min-height:24px; font-size:0.95rem; color:var(--muted); }
+      @media (max-width: 920px) { .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div class="hero-top">
+          <span class="eyebrow">Agumbe Playground Auth</span>
+          <a class="secondary" href="/playground">Back to Playground</a>
+        </div>
+        <h1>Sign in and manage tokens.</h1>
+        <p>Use the existing auth service for email sign-in, signup, Google OAuth, and app token creation. The active token is stored in this browser session for the main playground.</p>
+      </section>
+
+      <section class="card">
+        <div class="section">
+          <p class="section-title">Sign In</p>
+          <div class="grid cols-2">
+            <label>
+              First Name
+              <input id="signupFirstName" type="text" placeholder="Jack" />
+            </label>
+            <label>
+              Last Name
+              <input id="signupLastName" type="text" placeholder="Smith" />
+            </label>
+            <label>
+              Email
+              <input id="signinEmail" type="email" placeholder="you@agumbe.ai" />
+            </label>
+            <label>
+              Password
+              <input id="signinPassword" type="password" placeholder="Password" />
+            </label>
+          </div>
+          <div class="actions">
+            <button id="signIn" class="primary" type="button">Sign In</button>
+            <button id="signUp" class="accent" type="button">Sign Up</button>
+            <button id="googleOauth" class="ghost" type="button">Continue with Google</button>
+            <button id="useSessionJwt" class="secondary" type="button">Use Session JWT</button>
+          </div>
+          <div id="identity" class="identity" style="margin-top:12px;">
+            <strong>No active session yet.</strong>
+            <div class="identity-meta">
+              <span class="mini-hint">Sign in, sign up, or use Google OAuth to mint a JWT through the existing auth service and reuse it in the playground.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-title">Create App Token</p>
+          <div class="grid cols-3">
+            <label>
+              App Name
+              <input id="appName" type="text" value="Playground" />
+            </label>
+            <label>
+              Scope
+              <input id="appScope" type="text" value="llm:invoke" />
+            </label>
+            <label>
+              Purpose
+              <input id="appPurpose" type="text" value="Internal playground access" />
+            </label>
+          </div>
+          <div class="actions">
+            <button id="createAppToken" class="accent" type="button">Create App Token</button>
+            <button id="useAppToken" class="secondary" type="button">Use App Token</button>
+          </div>
+          <div id="tokenResult" class="token-result" style="margin-top:12px;">
+            <strong>No app token created yet.</strong>
+            <div class="mini-hint">This uses the existing auth service's app register + app token flow. It is an API token, not a separate LLM-native key yet.</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-title">Status</p>
+          <div id="status" class="status">Ready.</div>
+        </div>
+
+        <div class="section">
+          <p class="section-title">Raw JSON</p>
+          <pre id="jsonOutput">{}</pre>
+        </div>
+      </section>
+    </main>
+    <script>
+      const config = ${bootstrap};
+      const storageKeys = {
+        activeToken: "agumbe-llm-playground-token",
+        sessionJwt: "agumbe-llm-playground-session-jwt",
+        latestAppToken: "agumbe-llm-playground-app-token",
+        latestAppBundle: "agumbe-llm-playground-app-bundle"
+      };
+
+      const signupFirstNameInput = document.getElementById("signupFirstName");
+      const signupLastNameInput = document.getElementById("signupLastName");
+      const signinEmailInput = document.getElementById("signinEmail");
+      const signinPasswordInput = document.getElementById("signinPassword");
+      const appNameInput = document.getElementById("appName");
+      const appScopeInput = document.getElementById("appScope");
+      const appPurposeInput = document.getElementById("appPurpose");
+      const identity = document.getElementById("identity");
+      const tokenResult = document.getElementById("tokenResult");
+      const status = document.getElementById("status");
+      const jsonOutput = document.getElementById("jsonOutput");
+      const signInButton = document.getElementById("signIn");
+      const signUpButton = document.getElementById("signUp");
+      const googleOauthButton = document.getElementById("googleOauth");
+      const useSessionJwtButton = document.getElementById("useSessionJwt");
+      const createAppTokenButton = document.getElementById("createAppToken");
+      const useAppTokenButton = document.getElementById("useAppToken");
+
+      const state = {
+        sessionJwt: sessionStorage.getItem(storageKeys.sessionJwt) || "",
+        latestAppToken: sessionStorage.getItem(storageKeys.latestAppToken) || "",
+        latestAppBundle: null
+      };
+
+      try { state.latestAppBundle = JSON.parse(sessionStorage.getItem(storageKeys.latestAppBundle) || "null"); } catch { state.latestAppBundle = null; }
+
+      function escapeHtml(value) {
+        return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+      }
+
+      function decodeJwt(token) {
+        const parts = token.split(".");
+        if (parts.length < 2) return null;
+        try {
+          const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+          const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+          return JSON.parse(atob(padded));
+        } catch {
+          return null;
+        }
+      }
+
+      function setStatus(message) { status.textContent = message; }
+      function setJson(value) { jsonOutput.textContent = JSON.stringify(value, null, 2); }
+
+      function renderIdentity(claims, sourceLabel) {
+        if (!claims) {
+          identity.innerHTML = '<strong>No active session yet.</strong><div class="identity-meta"><span class="mini-hint">Sign in, sign up, or use Google OAuth to mint a JWT through the existing auth service and reuse it in the playground.</span></div>';
+          return;
+        }
+        identity.innerHTML = [
+          '<strong>' + escapeHtml(claims.email || claims.owner_user || claims.client_key || "Signed in") + '</strong>',
+          '<div class="identity-meta">',
+          '<span><strong style="display:block; margin-bottom:4px;">Source</strong>' + escapeHtml(sourceLabel) + '</span>',
+          '<span><strong style="display:block; margin-bottom:4px;">Tenant</strong>' + escapeHtml(claims.tenant_id || claims.tenantId || "n/a") + '</span>',
+          '<span><strong style="display:block; margin-bottom:4px;">Subject</strong>' + escapeHtml(claims.id || claims.sub || claims.client_key || "n/a") + '</span>',
+          '</div>'
+        ].join("");
+      }
+
+      function renderTokenResult(bundle) {
+        if (!bundle) {
+          tokenResult.innerHTML = '<strong>No app token created yet.</strong><div class="mini-hint">This uses the existing auth service\\'s app register + app token flow. It is an API token, not a separate LLM-native key yet.</div>';
+          return;
+        }
+        tokenResult.innerHTML = [
+          '<strong>App token ready.</strong>',
+          '<div class="identity-meta">',
+          '<span><strong style="display:block; margin-bottom:4px;">App</strong>' + escapeHtml(bundle.app.app_name) + '</span>',
+          '<span><strong style="display:block; margin-bottom:4px;">Client Key</strong>' + escapeHtml(bundle.app.client_key) + '</span>',
+          '<span><strong style="display:block; margin-bottom:4px;">Scope</strong>' + escapeHtml(bundle.app.scope) + '</span>',
+          '</div>',
+          '<div class="mini-hint" style="margin-top:10px;">Use App Token will switch the active request credential for the main playground.</div>'
+        ].join("");
+      }
+
+      function consumeOAuthResult() {
+        const url = new URL(window.location.href);
+        const statusValue = url.searchParams.get("status");
+        const provider = url.searchParams.get("provider");
+        const jwt = url.searchParams.get("jwt");
+        const message = url.searchParams.get("message");
+        if (!statusValue || !provider) return;
+        if (statusValue === "success" && jwt) {
+          state.sessionJwt = jwt;
+          sessionStorage.setItem(storageKeys.sessionJwt, jwt);
+          sessionStorage.setItem(storageKeys.activeToken, jwt);
+          renderIdentity(decodeJwt(jwt), provider + " OAuth");
+          setStatus("Signed in with " + provider + ". You can go back to the playground now.");
+          setJson({ data: { provider, claims: decodeJwt(jwt) } });
+        } else if (statusValue === "error") {
+          setStatus(message || (provider + " sign-in failed."));
+          setJson({ error: { message: message || (provider + " sign-in failed.") } });
+        }
+        window.history.replaceState({}, document.title, url.pathname);
+      }
+
+      async function callApi(path, payload, requiresAuth, overrideToken) {
+        const token = (overrideToken || "").trim();
+        if (requiresAuth && !token) throw new Error("A signed-in session JWT is required.");
+        const response = await fetch(path, {
+          method: payload ? "POST" : "GET",
+          headers: { ...(payload ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: "Bearer " + token } : {}) },
+          body: payload ? JSON.stringify(payload) : undefined,
+        });
+        const text = await response.text();
+        const data = text ? JSON.parse(text) : {};
+        if (!response.ok) throw new Error(data?.error?.message || "Request failed");
+        return data;
+      }
+
+      signInButton.addEventListener("click", async () => {
+        signInButton.disabled = true;
+        setStatus("Signing in...");
+        try {
+          const data = await callApi("/api/v1/playground/auth/signin", {
+            email: signinEmailInput.value.trim(),
+            password: signinPasswordInput.value,
+          }, false);
+          const token = data?.data?.token;
+          if (!token) throw new Error("Auth service did not return a session token.");
+          state.sessionJwt = token;
+          sessionStorage.setItem(storageKeys.sessionJwt, token);
+          sessionStorage.setItem(storageKeys.activeToken, token);
+          renderIdentity(data.data.claims || decodeJwt(token), "Session JWT");
+          setJson(data);
+          setStatus("Signed in. Session JWT is now active for the main playground.");
+        } catch (error) {
+          setStatus(error.message);
+          setJson({ error: { message: error.message } });
+        } finally {
+          signInButton.disabled = false;
+        }
+      });
+
+      signUpButton.addEventListener("click", async () => {
+        signUpButton.disabled = true;
+        setStatus("Creating account...");
+        try {
+          const firstName = signupFirstNameInput.value.trim();
+          const lastName = signupLastNameInput.value.trim();
+          if (!firstName || !lastName) throw new Error("First name and last name are required for signup.");
+          const data = await callApi("/api/v1/playground/auth/signup", {
+            email: signinEmailInput.value.trim(),
+            password: signinPasswordInput.value,
+            first_name: firstName,
+            last_name: lastName,
+          }, false);
+          setJson(data);
+          setStatus("Signup submitted. Check email verification before signing in.");
+        } catch (error) {
+          setStatus(error.message);
+          setJson({ error: { message: error.message } });
+        } finally {
+          signUpButton.disabled = false;
+        }
+      });
+
+      googleOauthButton.addEventListener("click", () => {
+        const redirectUri = window.location.origin + window.location.pathname;
+        const oauthUrl = config.authBaseUrl + "/api/v1/users/auth/google?redirect_uri=" + encodeURIComponent(redirectUri);
+        window.location.href = oauthUrl;
+      });
+
+      useSessionJwtButton.addEventListener("click", () => {
+        if (!state.sessionJwt) {
+          setStatus("Sign in first to load a session JWT.");
+          return;
+        }
+        sessionStorage.setItem(storageKeys.activeToken, state.sessionJwt);
+        renderIdentity(decodeJwt(state.sessionJwt), "Session JWT");
+        setStatus("Session JWT is now the active Bearer token for the main playground.");
+      });
+
+      createAppTokenButton.addEventListener("click", async () => {
+        createAppTokenButton.disabled = true;
+        setStatus("Creating app token...");
+        try {
+          if (!state.sessionJwt) throw new Error("Sign in first so the auth service can issue an app token.");
+          const data = await callApi("/api/v1/playground/auth/app-token", {
+            app_name: appNameInput.value.trim(),
+            scope: appScopeInput.value.trim(),
+            purpose: appPurposeInput.value.trim(),
+          }, true, state.sessionJwt);
+          const accessToken = data?.data?.token?.access_token;
+          if (!accessToken) throw new Error("Auth service did not return an access token.");
+          state.latestAppToken = accessToken;
+          state.latestAppBundle = data.data;
+          sessionStorage.setItem(storageKeys.latestAppToken, accessToken);
+          sessionStorage.setItem(storageKeys.latestAppBundle, JSON.stringify(data.data));
+          renderTokenResult(data.data);
+          setJson(data);
+          setStatus("App token created. You can use it in the main playground.");
+        } catch (error) {
+          setStatus(error.message);
+          setJson({ error: { message: error.message } });
+        } finally {
+          createAppTokenButton.disabled = false;
+        }
+      });
+
+      useAppTokenButton.addEventListener("click", () => {
+        if (!state.latestAppToken) {
+          setStatus("Create an app token first.");
+          return;
+        }
+        sessionStorage.setItem(storageKeys.activeToken, state.latestAppToken);
+        renderIdentity(decodeJwt(state.latestAppToken), "App Token");
+        setStatus("App token is now the active Bearer token for the main playground.");
+      });
+
+      if (state.sessionJwt) renderIdentity(decodeJwt(state.sessionJwt), "Session JWT");
+      renderTokenResult(state.latestAppBundle);
       consumeOAuthResult();
     </script>
   </body>
@@ -1408,6 +1594,15 @@ export function registerPlaygroundRoutes(app: FastifyInstance, env: Env) {
   app.get("/playground", async (_request, reply) => {
     reply.type("text/html; charset=utf-8").send(
       createPlaygroundHtml({
+        authBaseUrl: env.AUTH_BASE_URL,
+        pricing: env.MODEL_PRICING,
+      }),
+    );
+  });
+
+  app.get("/playground/auth", async (_request, reply) => {
+    reply.type("text/html; charset=utf-8").send(
+      createPlaygroundAuthHtml({
         authBaseUrl: env.AUTH_BASE_URL,
         pricing: env.MODEL_PRICING,
       }),
