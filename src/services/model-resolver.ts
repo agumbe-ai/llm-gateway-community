@@ -55,6 +55,19 @@ export class ModelResolver {
     requestedModel: string,
     isAlias: boolean,
   ): ResolvedModel {
+    const curatedModel = CURATED_MODELS.find((model) => model.id === targetModel);
+    if (curatedModel) {
+      return {
+        requestedModel,
+        canonicalModel: curatedModel.id,
+        provider: curatedModel.provider,
+        upstreamModel: curatedModel.upstreamModel,
+        kind: curatedModel.kind,
+        isAlias,
+        alias: isAlias ? requestedModel : undefined,
+      };
+    }
+
     const match = targetModel.match(/^@(openai|anthropic|google)\/(.+)$/);
     if (!match) {
       if (isAlias) {

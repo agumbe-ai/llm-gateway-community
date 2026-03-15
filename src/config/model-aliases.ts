@@ -24,7 +24,7 @@ export const CURATED_MODELS: CatalogModel[] = [
   {
     id: "@anthropic/claude-sonnet-4",
     provider: "anthropic",
-    upstreamModel: "claude-sonnet-4",
+    upstreamModel: "claude-sonnet-4-0",
     kind: "chat",
   },
   {
