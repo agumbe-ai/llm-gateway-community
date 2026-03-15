@@ -113,7 +113,7 @@ export function buildApp(options: BuildAppOptions) {
 
   registerHealthRoutes(app, options.env.SERVICE_NAME);
   registerModelsRoutes(app, options.modelResolver);
-  registerPlaygroundRoutes(app);
+  registerPlaygroundRoutes(app, options.env);
   registerChatRoutes(app, options.chatService, requireAuth);
   registerEmbeddingsRoutes(app, options.embeddingsService, requireAuth);
 

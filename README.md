@@ -108,6 +108,7 @@ Common runtime:
 - `PORT` default `3000`
 - `SERVICE_NAME` default `llm-gateway`
 - `CORS_ALLOWED_ORIGINS` default `https://agumbe.ai`
+- `AUTH_BASE_URL` default `https://development.agumbe.dev`
 - `REQUEST_TIMEOUT_MS` default `30000`
 - `RATE_LIMIT_MAX` default `60`
 - `RATE_LIMIT_WINDOW` default `1 minute`
@@ -153,7 +154,16 @@ If you do not want Kafka locally, keep `KAFKA_ENABLED=false`.
 
 If browser code hosted on `agumbe.ai` calls `api.agumbe.ai` directly, keep `CORS_ALLOWED_ORIGINS=https://agumbe.ai`. Multiple allowed origins can be supplied as a comma-separated list.
 
-For internal testing, the gateway also exposes a lightweight browser playground at `/playground`.
+For internal testing, the gateway also exposes a browser playground at `/playground`.
+
+The playground now supports:
+
+- email/password sign-in through the existing auth service
+- app token creation using the existing `/app/register` + `/app/token` flow
+- local recent-request history
+- per-run usage and estimated cost summaries
+
+`AUTH_BASE_URL` controls which auth environment the playground proxies to. In the current short-lived `api.agumbe.ai -> development` setup, keep this pointed at `https://development.agumbe.dev`.
 
 ## Build and run
 
