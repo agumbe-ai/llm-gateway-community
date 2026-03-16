@@ -113,7 +113,7 @@ function sanitizeAppForPlayground(app: Record<string, unknown> | null | undefine
   }
 
   return {
-    id: app.id ?? null,
+    id: app.id ?? app._id ?? null,
     app_name: app.app_name ?? null,
     owner_user: app.owner_user ?? null,
     scope: app.scope ?? null,
@@ -2375,6 +2375,18 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           state.latestAppBundle = data.data;
           sessionStorage.setItem(storageKeys.latestAppToken, accessToken);
           sessionStorage.setItem(storageKeys.latestAppBundle, JSON.stringify(data.data));
+          if (data?.data?.app?.id) {
+            const nextApps = Array.isArray(state.apps) ? [...state.apps] : [];
+            const existingIndex = nextApps.findIndex((app) => app?.id === data.data.app.id);
+            if (existingIndex >= 0) {
+              nextApps[existingIndex] = data.data.app;
+            } else {
+              nextApps.unshift(data.data.app);
+            }
+            state.apps = nextApps;
+            state.selectedAppId = data.data.app.id;
+            renderApps(state.apps);
+          }
           renderTokenResult(data.data);
           renderActiveSelection();
           loadApps();
@@ -2594,7 +2606,11 @@ export function registerPlaygroundRoutes(app: FastifyInstance, env: Env) {
     }
 
     reply.send({
-      data: Array.isArray(result.data?.data) ? result.data.data : [],
+      data: Array.isArray(result.data?.data)
+        ? result.data.data
+            .map((appEntry: Record<string, unknown>) => sanitizeAppForPlayground(appEntry))
+            .filter(Boolean)
+        : [],
     });
   });
 
