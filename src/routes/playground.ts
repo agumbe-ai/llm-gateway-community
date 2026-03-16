@@ -1688,19 +1688,46 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         align-items: center;
         gap: 12px;
         text-align: left;
+        cursor: pointer;
+        transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease, transform 140ms ease;
+      }
+      .app-choice:hover {
+        border-color: rgba(129,69,255,0.28);
+        box-shadow: 0 14px 32px rgba(129,69,255,0.12);
+        transform: translateY(-1px);
       }
       .app-choice strong {
         display: block;
         margin-bottom: 4px;
       }
       .app-choice.active {
-        background: rgba(129,69,255,0.12);
-        border-color: rgba(129,69,255,0.3);
-        box-shadow: inset 0 0 0 1px rgba(129,69,255,0.08);
+        background: rgba(129,69,255,0.14);
+        border-color: rgba(129,69,255,0.6);
+        box-shadow: 0 18px 40px rgba(129,69,255,0.16), inset 0 0 0 1px rgba(129,69,255,0.16);
       }
       .app-choice-meta {
         display: grid;
         gap: 2px;
+      }
+      .app-choice-side {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .app-choice-selected {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(255,109,63,0.12);
+        color: var(--orange);
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
       }
       .app-choice-badge {
         padding: 6px 10px;
@@ -2108,34 +2135,45 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           ? state.selectedAppId
           : apps[0].id;
         state.selectedAppId = selectedAppId;
+        const selectedApp = apps.find((app) => app.id === selectedAppId) || apps[0];
 
         appsList.innerHTML = [
           '<div class="section-title" style="margin-bottom:0;">Existing Apps</div>',
           '<div id="appsPicker" class="apps-picker">',
           apps.map((app) => {
             const activeClass = app.id === selectedAppId ? " active" : "";
+            const activeBadge = app.id === selectedAppId
+              ? '<span class="app-choice-selected">' + checkIcon + '<span class="button-text">Selected</span></span>'
+              : "";
             return [
-              '<button class="app-choice' + activeClass + '" type="button" data-app-id="' + escapeHtml(app.id) + '">',
+              '<button class="app-choice' + activeClass + '" type="button" data-app-id="' + escapeHtml(app.id) + '" aria-pressed="' + (app.id === selectedAppId ? "true" : "false") + '">',
               '<span class="app-choice-meta">',
               '<strong>' + escapeHtml(app.app_name || "Unnamed app") + '</strong>',
               '<span class="mini-hint">' + escapeHtml(app.purpose || "No purpose set") + '</span>',
               '</span>',
+              '<span class="app-choice-side">',
+              activeBadge,
               '<span class="app-choice-badge">' + escapeHtml(app.scope || "no-scope") + '</span>',
+              '</span>',
               '</button>'
             ].join("");
           }).join(""),
           '</div>',
+          '<div class="mini-hint" style="margin-top:8px;">Selected app: <strong>' + escapeHtml(selectedApp?.app_name || "Unnamed app") + '</strong></div>',
           '<div class="actions">',
-          '<button id="useExistingAppButton" class="ghost" type="button">${appWindowIcon}<span class="button-text">Use Selected App In Playground</span></button>',
+          '<button id="useExistingAppButton" class="ghost" type="button">${appWindowIcon}<span class="button-text">Use ' + escapeHtml(selectedApp?.app_name || "Selected App") + ' In Playground</span></button>',
           '</div>',
           '<div class="mini-hint">This mints a fresh access token for the selected tenant app and makes it the active playground credential.</div>'
         ].join("");
 
-        Array.from(document.querySelectorAll("[data-app-id]")).forEach((button) => {
-          button.addEventListener("click", () => {
-            state.selectedAppId = button.getAttribute("data-app-id") || "";
-            renderApps(state.apps);
-          });
+        const appsPicker = document.getElementById("appsPicker");
+        appsPicker?.addEventListener("click", (event) => {
+          const target = event.target;
+          if (!(target instanceof Element)) return;
+          const button = target.closest("[data-app-id]");
+          if (!(button instanceof HTMLElement)) return;
+          state.selectedAppId = button.getAttribute("data-app-id") || "";
+          renderApps(state.apps);
         });
 
         const useExistingAppButton = document.getElementById("useExistingAppButton");
