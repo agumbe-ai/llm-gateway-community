@@ -107,6 +107,34 @@ function getErrorMessage(data: any, fallback: string) {
   return fallback;
 }
 
+function sanitizeAppForPlayground(app: Record<string, unknown> | null | undefined) {
+  if (!app) {
+    return null;
+  }
+
+  return {
+    id: app.id ?? null,
+    app_name: app.app_name ?? null,
+    owner_user: app.owner_user ?? null,
+    scope: app.scope ?? null,
+    purpose: app.purpose ?? null,
+    status: app.status ?? null,
+    tenant_id: app.tenant_id ?? null,
+  };
+}
+
+function sanitizeTokenForPlayground(token: Record<string, unknown> | null | undefined) {
+  if (!token) {
+    return null;
+  }
+
+  return {
+    access_token: token.access_token ?? null,
+    token_type: token.token_type ?? "bearer",
+    expires_in: token.expires_in ?? null,
+  };
+}
+
 async function callAuth(
   authBaseUrl: string,
   path: string,
@@ -643,6 +671,33 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
         margin-top: 12px;
       }
 
+      .toast-stack {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        display: grid;
+        gap: 10px;
+        z-index: 50;
+      }
+
+      .toast {
+        min-width: 240px;
+        max-width: min(420px, calc(100vw - 36px));
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid rgba(129, 69, 255, 0.16);
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: var(--shadow);
+      }
+
+      .toast.success {
+        border-color: rgba(0, 163, 255, 0.24);
+      }
+
+      .toast.error {
+        border-color: rgba(255, 109, 63, 0.28);
+      }
+
       @media (max-width: 920px) {
         .layout,
         .grid.cols-2,
@@ -656,6 +711,7 @@ function createPlaygroundHtml(config: PlaygroundConfig) {
     </style>
   </head>
   <body>
+    <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
     <main>
       <section class="hero">
         <div class="hero-top">
@@ -851,6 +907,7 @@ How does Argo CD work?</textarea>
       const accountMenuPanel = document.getElementById("accountMenuPanel");
       const accountMenuCard = document.getElementById("accountMenuCard");
       const logoutButton = document.getElementById("logoutButton");
+      const toastStack = document.getElementById("toastStack");
 
       const state = {
         sessionJwt: sessionStorage.getItem(storageKeys.sessionJwt) || "",
@@ -901,8 +958,55 @@ How does Argo CD work?</textarea>
         status.textContent = message;
       }
 
+      function showToast(message, tone) {
+        const toast = document.createElement("div");
+        toast.className = "toast " + (tone || "success");
+        toast.textContent = message;
+        toastStack.appendChild(toast);
+        window.setTimeout(() => {
+          toast.remove();
+        }, 2600);
+      }
+
+      function sanitizeForDisplay(value) {
+        if (Array.isArray(value)) {
+          return value.map((entry) => sanitizeForDisplay(entry));
+        }
+
+        if (!value || typeof value !== "object") {
+          return value;
+        }
+
+        const sensitiveKeys = new Set([
+          "token",
+          "access_token",
+          "refresh_token",
+          "secret_jwt",
+          "client_secret",
+          "authorization",
+          "cookie",
+          "set-cookie",
+        ]);
+
+        const result = {};
+        Object.entries(value).forEach(([key, entry]) => {
+          if (sensitiveKeys.has(key.toLowerCase())) {
+            if (key.toLowerCase() === "token" && entry && typeof entry === "object" && !Array.isArray(entry)) {
+              result[key] = sanitizeForDisplay(entry);
+            } else {
+              result[key] = "[redacted]";
+            }
+            return;
+          }
+
+          result[key] = sanitizeForDisplay(entry);
+        });
+
+        return result;
+      }
+
       function setJson(value) {
-        jsonOutput.textContent = JSON.stringify(value, null, 2);
+        jsonOutput.textContent = JSON.stringify(sanitizeForDisplay(value), null, 2);
       }
 
       function setAssistantPreview(value) {
@@ -1326,8 +1430,10 @@ How does Argo CD work?</textarea>
         try {
           await navigator.clipboard.writeText(assistant.textContent || "");
           setStatus("Assistant response copied to clipboard.");
+          showToast("Assistant response copied.", "success");
         } catch {
           setStatus("Clipboard copy failed.");
+          showToast("Clipboard copy failed.", "error");
         }
       });
 
@@ -1345,6 +1451,7 @@ How does Argo CD work?</textarea>
         localStorage.removeItem(storageKeys.recentRequests);
         renderRecentRequests();
         setStatus("Recent request history cleared.");
+        showToast("Recent request history cleared.", "success");
       });
 
       presetButtons.forEach((button) => {
@@ -1362,14 +1469,31 @@ How does Argo CD work?</textarea>
       logoutButton.addEventListener("click", () => {
         clearCredentials();
         setStatus("Logged out from this browser session.");
+        showToast("Logged out from this browser session.", "success");
       });
 
-      accountMenuButton.addEventListener("click", () => {
-        accountMenuPanel.classList.toggle("hidden");
+      accountMenuButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const isOpen = !accountMenuPanel.classList.contains("hidden");
+        if (isOpen) {
+          closeAccountMenu();
+          return;
+        }
+        accountMenuPanel.classList.remove("hidden");
       });
 
-      document.addEventListener("click", (event) => {
-        if (!accountMenuShell.contains(event.target)) {
+      accountMenuPanel.addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+
+      document.addEventListener("pointerdown", (event) => {
+        if (!accountMenuPanel.classList.contains("hidden") && !accountMenuShell.contains(event.target)) {
+          closeAccountMenu();
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
           closeAccountMenu();
         }
       });
@@ -1549,6 +1673,45 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         gap:10px;
         margin-top:12px;
       }
+      .apps-picker {
+        display: grid;
+        gap: 10px;
+      }
+      .app-choice {
+        width: 100%;
+        border-radius: 18px;
+        border: 1px solid rgba(129,69,255,0.14);
+        background: rgba(255,255,255,0.88);
+        padding: 14px 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        text-align: left;
+      }
+      .app-choice strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+      .app-choice.active {
+        background: rgba(129,69,255,0.12);
+        border-color: rgba(129,69,255,0.3);
+        box-shadow: inset 0 0 0 1px rgba(129,69,255,0.08);
+      }
+      .app-choice-meta {
+        display: grid;
+        gap: 2px;
+      }
+      .app-choice-badge {
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(0,163,255,0.1);
+        color: var(--blue);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        white-space: nowrap;
+      }
       .selection-card {
         margin-top: 12px;
         padding: 14px 16px;
@@ -1569,6 +1732,25 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         gap: 8px;
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+      .toast-stack {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        display: grid;
+        gap: 10px;
+        z-index: 50;
+      }
+      .toast {
+        min-width: 240px;
+        max-width: min(420px, calc(100vw - 36px));
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid rgba(129,69,255,0.16);
+        background: rgba(255,255,255,0.96);
+        box-shadow: var(--shadow);
+      }
+      .toast.success { border-color: rgba(0,163,255,0.24); }
+      .toast.error { border-color: rgba(255,109,63,0.28); }
       .mini-hint { color:var(--muted); font-size:0.82rem; }
       .icon-button { min-width:44px; min-height:44px; padding:10px 14px; }
       .token.masked { -webkit-text-security: disc; }
@@ -1581,6 +1763,7 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
     </style>
   </head>
   <body>
+    <div id="authToastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
     <main>
       <section class="hero">
         <div class="hero-top">
@@ -1726,13 +1909,15 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
       const authAccountMenuCard = document.getElementById("authAccountMenuCard");
       const switchAccountMenuButton = document.getElementById("switchAccountMenuButton");
       const signOutMenuButton = document.getElementById("signOutMenuButton");
+      const authToastStack = document.getElementById("authToastStack");
 
       const state = {
         sessionJwt: sessionStorage.getItem(storageKeys.sessionJwt) || "",
         latestAppToken: sessionStorage.getItem(storageKeys.latestAppToken) || "",
         latestAppBundle: null,
         apps: [],
-        activeToken: sessionStorage.getItem(storageKeys.activeToken) || ""
+        activeToken: sessionStorage.getItem(storageKeys.activeToken) || "",
+        selectedAppId: ""
       };
 
       try { state.latestAppBundle = JSON.parse(sessionStorage.getItem(storageKeys.latestAppBundle) || "null"); } catch { state.latestAppBundle = null; }
@@ -1754,8 +1939,54 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
       }
 
       function setStatus(message) { status.textContent = message; }
-      function setJson(value) { jsonOutput.textContent = JSON.stringify(value, null, 2); }
+      function sanitizeForDisplay(value, parentKey) {
+        if (Array.isArray(value)) {
+          return value.map((entry) => sanitizeForDisplay(entry, parentKey));
+        }
+
+        if (!value || typeof value !== "object") {
+          return value;
+        }
+
+        const sensitiveKeys = new Set([
+          "token",
+          "access_token",
+          "refresh_token",
+          "secret_jwt",
+          "client_secret",
+          "authorization",
+          "cookie",
+          "set-cookie",
+        ]);
+
+        const result = {};
+        Object.entries(value).forEach(([key, entry]) => {
+          if (sensitiveKeys.has(key.toLowerCase())) {
+            if (key.toLowerCase() === "token" && entry && typeof entry === "object" && !Array.isArray(entry)) {
+              result[key] = sanitizeForDisplay(entry, key);
+            } else {
+              result[key] = "[redacted]";
+            }
+            return;
+          }
+
+          result[key] = sanitizeForDisplay(entry, key);
+        });
+
+        return result;
+      }
+
+      function setJson(value) { jsonOutput.textContent = JSON.stringify(sanitizeForDisplay(value, ""), null, 2); }
       function closeAuthMenu() { authAccountMenuPanel.classList.add("hidden"); }
+      function showToast(message, tone) {
+        const toast = document.createElement("div");
+        toast.className = "toast " + (tone || "success");
+        toast.textContent = message;
+        authToastStack.appendChild(toast);
+        window.setTimeout(() => {
+          toast.remove();
+        }, 2600);
+      }
       function renderActiveSelection() {
         const activeToken = sessionStorage.getItem(storageKeys.activeToken) || state.activeToken || "";
         state.activeToken = activeToken;
@@ -1868,28 +2099,49 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
 
       function renderApps(apps) {
         if (!apps.length) {
+          state.selectedAppId = "";
           appsList.innerHTML = '<div class="mini-hint">No existing tenant apps found yet. Create one below if you need a dedicated playground token.</div>';
           return;
         }
 
+        const selectedAppId = apps.some((app) => app.id === state.selectedAppId)
+          ? state.selectedAppId
+          : apps[0].id;
+        state.selectedAppId = selectedAppId;
+
         appsList.innerHTML = [
-          '<label>',
-          'Existing Apps',
-          '<select id="existingAppsSelect">',
-          apps.map((app) => '<option value="' + escapeHtml(app.id) + '">' + escapeHtml(app.app_name || "Unnamed app") + ' · ' + escapeHtml(app.scope || "no-scope") + '</option>').join(""),
-          '</select>',
-          '</label>',
+          '<div class="section-title" style="margin-bottom:0;">Existing Apps</div>',
+          '<div id="appsPicker" class="apps-picker">',
+          apps.map((app) => {
+            const activeClass = app.id === selectedAppId ? " active" : "";
+            return [
+              '<button class="app-choice' + activeClass + '" type="button" data-app-id="' + escapeHtml(app.id) + '">',
+              '<span class="app-choice-meta">',
+              '<strong>' + escapeHtml(app.app_name || "Unnamed app") + '</strong>',
+              '<span class="mini-hint">' + escapeHtml(app.purpose || "No purpose set") + '</span>',
+              '</span>',
+              '<span class="app-choice-badge">' + escapeHtml(app.scope || "no-scope") + '</span>',
+              '</button>'
+            ].join("");
+          }).join(""),
+          '</div>',
           '<div class="actions">',
           '<button id="useExistingAppButton" class="ghost" type="button">${appWindowIcon}<span class="button-text">Use Selected App In Playground</span></button>',
           '</div>',
           '<div class="mini-hint">This mints a fresh access token for the selected tenant app and makes it the active playground credential.</div>'
         ].join("");
 
-        const existingAppsSelect = document.getElementById("existingAppsSelect");
+        Array.from(document.querySelectorAll("[data-app-id]")).forEach((button) => {
+          button.addEventListener("click", () => {
+            state.selectedAppId = button.getAttribute("data-app-id") || "";
+            renderApps(state.apps);
+          });
+        });
+
         const useExistingAppButton = document.getElementById("useExistingAppButton");
 
         useExistingAppButton?.addEventListener("click", async () => {
-          const appId = existingAppsSelect?.value || "";
+          const appId = state.selectedAppId || "";
           if (!appId) {
             setStatus("Select an app first.");
             return;
@@ -1946,8 +2198,8 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           '<strong>App token ready.</strong>',
           '<div class="identity-meta">',
           '<span><strong style="display:block; margin-bottom:4px;">App</strong>' + escapeHtml(bundle.app.app_name) + '</span>',
-          '<span><strong style="display:block; margin-bottom:4px;">Client Key</strong>' + escapeHtml(bundle.app.client_key) + '</span>',
           '<span><strong style="display:block; margin-bottom:4px;">Scope</strong>' + escapeHtml(bundle.app.scope) + '</span>',
+          '<span><strong style="display:block; margin-bottom:4px;">Status</strong>' + escapeHtml(bundle.app.status || "active") + '</span>',
           '</div>',
           '<div class="mini-hint" style="margin-top:10px;">Use App Token will switch the active request credential for the main playground.</div>'
         ].join("");
@@ -2109,8 +2361,18 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         setStatus("App token is now the active Bearer token for the main playground.");
       });
 
-      authAccountMenuButton.addEventListener("click", () => {
-        authAccountMenuPanel.classList.toggle("hidden");
+      authAccountMenuButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const isOpen = !authAccountMenuPanel.classList.contains("hidden");
+        if (isOpen) {
+          closeAuthMenu();
+          return;
+        }
+        authAccountMenuPanel.classList.remove("hidden");
+      });
+
+      authAccountMenuPanel.addEventListener("click", (event) => {
+        event.stopPropagation();
       });
 
       switchAccountMenuButton.addEventListener("click", () => {
@@ -2123,10 +2385,17 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
         clearCredentials();
         renderIdentity(null, "");
         setStatus("Logged out from this browser session.");
+        showToast("Logged out from this browser session.", "success");
       });
 
-      document.addEventListener("click", (event) => {
-        if (!authAccountMenuShell.contains(event.target)) {
+      document.addEventListener("pointerdown", (event) => {
+        if (!authAccountMenuPanel.classList.contains("hidden") && !authAccountMenuShell.contains(event.target)) {
+          closeAuthMenu();
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
           closeAuthMenu();
         }
       });
@@ -2367,8 +2636,8 @@ export function registerPlaygroundRoutes(app: FastifyInstance, env: Env) {
 
     reply.send({
       data: {
-        app: appData,
-        token: tokenResult.data?.data || null,
+        app: sanitizeAppForPlayground(appData),
+        token: sanitizeTokenForPlayground(tokenResult.data?.data),
       },
     });
   });
@@ -2418,7 +2687,10 @@ export function registerPlaygroundRoutes(app: FastifyInstance, env: Env) {
     }
 
     reply.send({
-      data: tokenResult.data?.data || null,
+      data: {
+        app: sanitizeAppForPlayground(tokenResult.data?.data?.app),
+        token: sanitizeTokenForPlayground(tokenResult.data?.data?.token),
+      },
     });
   });
 }
