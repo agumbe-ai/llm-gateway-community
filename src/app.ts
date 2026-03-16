@@ -7,11 +7,13 @@ import type { Env } from "./config/env";
 import { createRequireAuth } from "./middleware/requireAuth";
 import { registerChatRoutes } from "./routes/chat";
 import { registerEmbeddingsRoutes } from "./routes/embeddings";
+import { registerGuardrailRoutes } from "./routes/guardrails";
 import { registerHealthRoutes } from "./routes/health";
 import { registerModelsRoutes } from "./routes/models";
 import { registerPlaygroundRoutes } from "./routes/playground";
 import { ChatService } from "./services/chat.service";
 import { EmbeddingsService } from "./services/embeddings.service";
+import { GuardrailConfigService } from "./services/guardrail-config.service";
 import { ModelResolver } from "./services/model-resolver";
 import { normalizeError, toErrorResponse } from "./utils/errors";
 import { loggerOptions } from "./utils/logger";
@@ -20,11 +22,12 @@ type BuildAppOptions = {
   env: Env;
   chatService: ChatService;
   embeddingsService: EmbeddingsService;
+  guardrailConfigService: GuardrailConfigService;
   modelResolver: ModelResolver;
 };
 
 const CORS_ALLOWED_HEADERS = "authorization, content-type, x-request-id";
-const CORS_ALLOWED_METHODS = "GET,HEAD,POST,OPTIONS";
+const CORS_ALLOWED_METHODS = "GET,HEAD,POST,PUT,OPTIONS";
 
 function applyCorsHeaders(request: FastifyRequest, reply: FastifyReply, allowedOrigins: Set<string>) {
   const origin = request.headers.origin;
@@ -114,6 +117,7 @@ export function buildApp(options: BuildAppOptions) {
   registerHealthRoutes(app, options.env.SERVICE_NAME);
   registerModelsRoutes(app, options.modelResolver);
   registerPlaygroundRoutes(app, options.env);
+  registerGuardrailRoutes(app, options.guardrailConfigService, requireAuth);
   registerChatRoutes(app, options.chatService, requireAuth);
   registerEmbeddingsRoutes(app, options.embeddingsService, requireAuth);
 

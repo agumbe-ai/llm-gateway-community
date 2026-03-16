@@ -7,6 +7,8 @@ import { BillingGuardService } from "./services/billing-guard.service";
 import { BillingUsageEmitterService } from "./services/billing-usage-emitter.service";
 import { ChatService } from "./services/chat.service";
 import { EmbeddingsService } from "./services/embeddings.service";
+import { GuardrailConfigService } from "./services/guardrail-config.service";
+import { GuardrailEnforcerService } from "./services/guardrail-enforcer.service";
 import { KafkaService } from "./services/kafka";
 import { ModelResolver } from "./services/model-resolver";
 import { closeMongo, connectMongo } from "./services/mongo";
@@ -26,6 +28,7 @@ async function start() {
   const usageEmitter = new UsageEmitterService(kafkaService, env.KAFKA_TOPIC_USAGE);
   const billingUsageEmitter = new BillingUsageEmitterService(kafkaService, env.KAFKA_TOPIC_BILLING);
   const modelResolver = new ModelResolver();
+  const guardrailConfigService = new GuardrailConfigService();
   const billingGuardService = new BillingGuardService({
     enabled: env.BILLING_ENFORCEMENT_ENABLED,
     tenantsBaseUrl: env.TENANTS_BASE_URL,
@@ -33,6 +36,7 @@ async function start() {
     billingPricing: env.BILLING_PRICING,
     defaultChatMaxCompletionTokens: env.BILLING_CHAT_DEFAULT_MAX_TOKENS,
   });
+  const guardrailEnforcer = new GuardrailEnforcerService();
 
   const providers = {
     openai: new OpenAIProviderAdapter(env.OPENAI_API_KEY),
@@ -47,6 +51,8 @@ async function start() {
     usageEmitter,
     billingGuardService,
     billingUsageEmitter,
+    guardrailConfigService,
+    guardrailEnforcer,
     modelPricing: env.MODEL_PRICING,
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
   });
@@ -58,6 +64,8 @@ async function start() {
     usageEmitter,
     billingGuardService,
     billingUsageEmitter,
+    guardrailConfigService,
+    guardrailEnforcer,
     modelPricing: env.MODEL_PRICING,
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
   });
@@ -66,6 +74,7 @@ async function start() {
     env,
     chatService,
     embeddingsService,
+    guardrailConfigService,
     modelResolver,
   });
 

@@ -6,6 +6,8 @@ import { normalizeError, providerError } from "../utils/errors";
 import { estimateCostUsd } from "../utils/pricing";
 import { BillingGuardService } from "./billing-guard.service";
 import { BillingUsageEmitterService } from "./billing-usage-emitter.service";
+import { GuardrailConfigService } from "./guardrail-config.service";
+import { GuardrailEnforcerService } from "./guardrail-enforcer.service";
 import { ModelResolver } from "./model-resolver";
 import { RequestLogService } from "./request-log.service";
 import { UsageEmitterService } from "./usage-emitter.service";
@@ -16,6 +18,8 @@ export type AuthenticatedRequestContext = {
   tenantId: string;
   email?: string;
   bearerToken: string;
+  subjectType: "session" | "app";
+  appId?: string;
 };
 
 type ChatServiceDeps = {
@@ -25,6 +29,8 @@ type ChatServiceDeps = {
   usageEmitter: UsageEmitterService;
   billingGuardService: BillingGuardService;
   billingUsageEmitter: BillingUsageEmitterService;
+  guardrailConfigService: GuardrailConfigService;
+  guardrailEnforcer: GuardrailEnforcerService;
   modelPricing: ModelPricing;
   requestTimeoutMs: number;
 };
@@ -54,11 +60,23 @@ export class ChatService {
       const request = chatRequestSchema.parse(input);
       requestedModel = request.model;
       resolvedModel = this.deps.modelResolver.resolve(request.model, "chat");
+      const appliedAppId =
+        context.subjectType === "app"
+          ? context.appId || "default"
+          : request.agumbe_guardrails_app_id || "default";
+      const policy = await this.deps.guardrailConfigService.getPolicy(context.tenantId, appliedAppId);
+      const prepared = this.deps.guardrailEnforcer.prepareChatRequest(
+        context,
+        request,
+        resolvedModel,
+        policy,
+        appliedAppId,
+      );
       await this.deps.billingGuardService.authorize({
         requestKind: "chat",
         context,
         model: resolvedModel,
-        request,
+        request: prepared.request,
         bearerToken: context.bearerToken,
       });
 
@@ -73,17 +91,24 @@ export class ChatService {
 
       const result = await adapter.chat({
         model: resolvedModel,
-        messages: request.messages,
-        maxTokens: request.max_tokens,
-        temperature: request.temperature,
+        messages: prepared.request.messages,
+        maxTokens: prepared.request.max_tokens,
+        temperature: prepared.request.temperature,
         timeoutMs: this.deps.requestTimeoutMs,
       });
+      const inspectedOutput = this.deps.guardrailEnforcer.inspectChatOutput(
+        context,
+        result.message.content,
+        policy,
+        prepared.trace,
+        request.agumbe_grounding_context,
+      );
 
       const latencyMs = Date.now() - startedAt;
       const usage = result.usage;
       const estimatedCost = estimateCostUsd(resolvedModel, usage, this.deps.modelPricing);
 
-      const response: ChatCompletionResponse = {
+      const response = this.deps.guardrailEnforcer.attachTrace<ChatCompletionResponse>({
         id: result.id || `chatcmpl_${randomUUID()}`,
         object: "chat.completion",
         created: result.created || Math.floor(Date.now() / 1000),
@@ -91,7 +116,10 @@ export class ChatService {
         choices: [
           {
             index: 0,
-            message: result.message,
+            message: {
+              ...result.message,
+              content: inspectedOutput.content,
+            },
             finish_reason: result.finishReason ?? "stop",
           },
         ],
@@ -100,7 +128,7 @@ export class ChatService {
           completion_tokens: usage.completionTokens,
           total_tokens: usage.totalTokens,
         },
-      };
+      }, inspectedOutput.trace);
 
       await Promise.allSettled([
         this.deps.requestLogService.log({
@@ -118,7 +146,7 @@ export class ChatService {
           totalTokens: usage.totalTokens,
           estimatedCost,
           createdAt: new Date(),
-          requestPayload: request,
+          requestPayload: prepared.request,
           responsePayload: response,
         }),
         this.deps.usageEmitter.emit({

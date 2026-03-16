@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { guardrailPolicySchema, type GuardrailTrace } from "./guardrails";
 
 const embeddingInputSchema = z.union([
   z.string().min(1),
@@ -8,6 +9,8 @@ const embeddingInputSchema = z.union([
 export const embeddingsRequestSchema = z.object({
   model: z.string().min(1),
   input: embeddingInputSchema,
+  agumbe_guardrails_app_id: z.string().min(1).optional(),
+  agumbe_guardrails: guardrailPolicySchema.optional(),
 });
 
 export type EmbeddingsRequest = z.infer<typeof embeddingsRequestSchema>;
@@ -24,4 +27,5 @@ export type EmbeddingsResponse = {
     prompt_tokens: number;
     total_tokens: number;
   };
+  agumbe_guardrails?: GuardrailTrace;
 };

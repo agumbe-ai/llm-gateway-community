@@ -6,6 +6,8 @@ import { estimateCostUsd } from "../utils/pricing";
 import { BillingGuardService } from "./billing-guard.service";
 import { BillingUsageEmitterService } from "./billing-usage-emitter.service";
 import type { AuthenticatedRequestContext } from "./chat.service";
+import { GuardrailConfigService } from "./guardrail-config.service";
+import { GuardrailEnforcerService } from "./guardrail-enforcer.service";
 import { ModelResolver } from "./model-resolver";
 import { RequestLogService } from "./request-log.service";
 import { UsageEmitterService } from "./usage-emitter.service";
@@ -17,6 +19,8 @@ type EmbeddingsServiceDeps = {
   usageEmitter: UsageEmitterService;
   billingGuardService: BillingGuardService;
   billingUsageEmitter: BillingUsageEmitterService;
+  guardrailConfigService: GuardrailConfigService;
+  guardrailEnforcer: GuardrailEnforcerService;
   modelPricing: ModelPricing;
   requestTimeoutMs: number;
 };
@@ -46,11 +50,23 @@ export class EmbeddingsService {
       const request = embeddingsRequestSchema.parse(input);
       requestedModel = request.model;
       resolvedModel = this.deps.modelResolver.resolve(request.model, "embeddings");
+      const appliedAppId =
+        context.subjectType === "app"
+          ? context.appId || "default"
+          : request.agumbe_guardrails_app_id || "default";
+      const policy = await this.deps.guardrailConfigService.getPolicy(context.tenantId, appliedAppId);
+      const prepared = this.deps.guardrailEnforcer.prepareEmbeddingsRequest(
+        context,
+        request,
+        resolvedModel,
+        policy,
+        appliedAppId,
+      );
       await this.deps.billingGuardService.authorize({
         requestKind: "embeddings",
         context,
         model: resolvedModel,
-        request,
+        request: prepared.request,
         bearerToken: context.bearerToken,
       });
 
@@ -65,7 +81,7 @@ export class EmbeddingsService {
 
       const result = await adapter.embeddings({
         model: resolvedModel,
-        input: request.input,
+        input: prepared.request.input,
         timeoutMs: this.deps.requestTimeoutMs,
       });
 
@@ -73,7 +89,7 @@ export class EmbeddingsService {
       const usage = result.usage;
       const estimatedCost = estimateCostUsd(resolvedModel, usage, this.deps.modelPricing);
 
-      const response: EmbeddingsResponse = {
+      const response = this.deps.guardrailEnforcer.attachTrace<EmbeddingsResponse>({
         object: "list",
         data: result.data.map((item) => ({
           object: "embedding",
@@ -85,7 +101,7 @@ export class EmbeddingsService {
           prompt_tokens: usage.promptTokens,
           total_tokens: usage.totalTokens,
         },
-      };
+      }, prepared.trace);
 
       await Promise.allSettled([
         this.deps.requestLogService.log({
@@ -103,7 +119,7 @@ export class EmbeddingsService {
           totalTokens: usage.totalTokens,
           estimatedCost,
           createdAt: new Date(),
-          requestPayload: request,
+          requestPayload: prepared.request,
           responsePayload: response,
         }),
         this.deps.usageEmitter.emit({

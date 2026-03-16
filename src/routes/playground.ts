@@ -2223,7 +2223,9 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
           state.apps = Array.isArray(data?.data) ? data.data : [];
           renderApps(state.apps);
         } catch (error) {
-          renderApps([]);
+          if (state.apps.length) {
+            renderApps(state.apps);
+          }
           setStatus(error.message);
         }
       }
