@@ -1525,6 +1525,7 @@ function createPlaygroundAuthHtml(config: PlaygroundConfig) {
   const keyIcon = iconSvg("keyRound");
   const chevronDownIcon = iconSvg("chevronDown");
   const appWindowIcon = iconSvg("appWindow");
+  const checkIcon = iconSvg("check");
 
   return `<!doctype html>
 <html lang="en">
