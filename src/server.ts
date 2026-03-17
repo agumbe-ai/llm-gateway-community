@@ -76,6 +76,7 @@ async function start() {
     embeddingsService,
     guardrailConfigService,
     modelResolver,
+    requestLogService,
   });
 
   const shutdown = async (signal: string) => {

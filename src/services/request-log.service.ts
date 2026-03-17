@@ -20,6 +20,25 @@ export type RequestLogRecord = {
   responsePayload?: unknown;
 };
 
+export type RequestLogListQuery = {
+  tenantId: string;
+  page: number;
+  pageSize: number;
+  status?: "success" | "error";
+  requestKind?: "chat" | "embeddings";
+  model?: string;
+};
+
+export type RequestLogListResult = {
+  data: RequestLogRecord[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 type RequestLogDocument = mongoose.Document & RequestLogRecord;
 
 const requestLogSchema = new mongoose.Schema<RequestLogDocument>(
@@ -68,4 +87,52 @@ export class RequestLogService {
 
     await RequestLogModel.create(payload);
   }
+
+  async list(query: RequestLogListQuery): Promise<RequestLogListResult> {
+    const filters: Record<string, unknown> = {
+      tenantId: query.tenantId,
+    };
+
+    if (query.status) {
+      filters.status = query.status;
+    }
+
+    if (query.requestKind) {
+      filters.requestKind = query.requestKind;
+    }
+
+    if (query.model) {
+      filters.requestedModel = {
+        $regex: escapeRegex(query.model),
+        $options: "i",
+      };
+    }
+
+    const page = Math.max(1, query.page);
+    const pageSize = Math.min(100, Math.max(10, query.pageSize));
+    const skip = (page - 1) * pageSize;
+
+    const [total, data] = await Promise.all([
+      RequestLogModel.countDocuments(filters),
+      RequestLogModel.find(filters)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(pageSize)
+        .lean<RequestLogRecord[]>(),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    };
+  }
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

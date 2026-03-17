@@ -11,10 +11,12 @@ import { registerGuardrailRoutes } from "./routes/guardrails";
 import { registerHealthRoutes } from "./routes/health";
 import { registerModelsRoutes } from "./routes/models";
 import { registerPlaygroundRoutes } from "./routes/playground";
+import { registerRequestRoutes } from "./routes/requests";
 import { ChatService } from "./services/chat.service";
 import { EmbeddingsService } from "./services/embeddings.service";
 import { GuardrailConfigService } from "./services/guardrail-config.service";
 import { ModelResolver } from "./services/model-resolver";
+import { RequestLogService } from "./services/request-log.service";
 import { normalizeError, toErrorResponse } from "./utils/errors";
 import { loggerOptions } from "./utils/logger";
 
@@ -24,6 +26,7 @@ type BuildAppOptions = {
   embeddingsService: EmbeddingsService;
   guardrailConfigService: GuardrailConfigService;
   modelResolver: ModelResolver;
+  requestLogService: RequestLogService;
 };
 
 const CORS_ALLOWED_HEADERS = "authorization, content-type, x-request-id";
@@ -118,6 +121,7 @@ export function buildApp(options: BuildAppOptions) {
   registerModelsRoutes(app, options.modelResolver);
   registerPlaygroundRoutes(app, options.env);
   registerGuardrailRoutes(app, options.guardrailConfigService, requireAuth);
+  registerRequestRoutes(app, options.requestLogService, requireAuth);
   registerChatRoutes(app, options.chatService, requireAuth);
   registerEmbeddingsRoutes(app, options.embeddingsService, requireAuth);
 
