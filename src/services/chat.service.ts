@@ -135,6 +135,8 @@ export class ChatService {
           tenantId: context.tenantId,
           userId: context.userId,
           requestId: context.requestId,
+          subjectType: context.subjectType,
+          appId: appliedAppId,
           requestKind: "chat",
           requestedModel: request.model,
           provider: resolvedModel.provider,
@@ -186,12 +188,20 @@ export class ChatService {
     } catch (error) {
       const normalized = normalizeError(error);
       const latencyMs = Date.now() - startedAt;
+      const inputRecord = input && typeof input === "object" ? (input as Record<string, unknown>) : null;
 
       await Promise.allSettled([
         this.deps.requestLogService.log({
           tenantId: context.tenantId,
           userId: context.userId,
           requestId: context.requestId,
+          subjectType: context.subjectType,
+          appId:
+            context.subjectType === "app"
+              ? context.appId || "default"
+              : typeof inputRecord?.agumbe_guardrails_app_id === "string"
+                ? inputRecord.agumbe_guardrails_app_id
+                : "default",
           requestKind: "chat",
           requestedModel,
           provider: resolvedModel?.provider || "unknown",

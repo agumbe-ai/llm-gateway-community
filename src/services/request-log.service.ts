@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 export type RequestLogRecord = {
   tenantId: string;
   userId: string;
+  subjectType?: "session" | "app";
+  appId?: string;
   requestId: string;
   requestKind: "chat" | "embeddings";
   requestedModel: string;
@@ -46,6 +48,8 @@ const requestLogSchema = new mongoose.Schema<RequestLogDocument>(
     tenantId: { type: String, required: true, index: true },
     userId: { type: String, required: true, index: true },
     requestId: { type: String, required: true, index: true },
+    subjectType: { type: String, enum: ["session", "app"] },
+    appId: { type: String, index: true },
     requestKind: { type: String, enum: ["chat", "embeddings"], required: true },
     requestedModel: { type: String, required: true },
     provider: { type: String, required: true },
