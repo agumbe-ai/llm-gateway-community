@@ -9,6 +9,18 @@ import type {
 import { extractUsage } from "../utils/usage";
 import { withTimeout } from "../utils/timeout";
 
+function isGpt5Model(model: string) {
+  return /^gpt-5(\.|-|$)/i.test(model);
+}
+
+function flattenResponseText(outputText: unknown): string {
+  if (typeof outputText === "string") {
+    return outputText;
+  }
+
+  return "";
+}
+
 export class OpenAIProviderAdapter implements ProviderAdapter {
   readonly provider = "openai" as const;
   private readonly client: OpenAI;
@@ -18,6 +30,32 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
   }
 
   async chat(request: ProviderChatRequest): Promise<ProviderChatResult> {
+    if (isGpt5Model(request.model.upstreamModel)) {
+      const response = await withTimeout(
+        this.client.responses.create({
+          model: request.model.upstreamModel,
+          input: request.messages.map((message) => ({
+            role: message.role,
+            content: [{ type: "input_text", text: message.content }],
+          })),
+          max_output_tokens: request.maxOutputTokens ?? request.maxCompletionTokens ?? request.maxTokens,
+        }),
+        request.timeoutMs,
+      );
+
+      return {
+        id: response.id,
+        created: Math.floor(Date.now() / 1000),
+        model: request.model.canonicalModel,
+        message: {
+          role: "assistant",
+          content: response.output_text ?? "",
+        },
+        finishReason: response.status ?? "stop",
+        usage: extractUsage(response.usage),
+      };
+    }
+
     const response = await withTimeout(
       this.client.chat.completions.create({
         model: request.model.upstreamModel,
@@ -25,7 +63,7 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
           role: message.role,
           content: message.content,
         })),
-        max_tokens: request.maxTokens,
+        max_completion_tokens: request.maxCompletionTokens ?? request.maxTokens,
         temperature: request.temperature,
       }),
       request.timeoutMs,

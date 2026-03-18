@@ -93,6 +93,8 @@ export class ChatService {
         model: resolvedModel,
         messages: prepared.request.messages,
         maxTokens: prepared.request.max_tokens,
+        maxCompletionTokens: prepared.request.max_completion_tokens,
+        maxOutputTokens: prepared.request.max_output_tokens,
         temperature: prepared.request.temperature,
         timeoutMs: this.deps.requestTimeoutMs,
       });

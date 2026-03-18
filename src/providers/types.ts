@@ -28,6 +28,8 @@ export type ProviderChatRequest = {
   model: ResolvedModel;
   messages: ChatMessage[];
   maxTokens?: number;
+  maxCompletionTokens?: number;
+  maxOutputTokens?: number;
   temperature?: number;
   timeoutMs: number;
 };
