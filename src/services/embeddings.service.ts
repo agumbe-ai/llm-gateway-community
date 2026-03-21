@@ -1,7 +1,7 @@
 import type { ModelPricing } from "../config/env";
 import type { ProviderAdapter, ProviderName, ResolvedModel } from "../providers/types";
 import { embeddingsRequestSchema, type EmbeddingsResponse } from "../types/embeddings";
-import { normalizeError, providerError } from "../utils/errors";
+import { normalizeError, providerError, AppError } from "../utils/errors";
 import { estimateCostUsd } from "../utils/pricing";
 import { BillingGuardService } from "./billing-guard.service";
 import { BillingUsageEmitterService } from "./billing-usage-emitter.service";
@@ -50,11 +50,23 @@ export class EmbeddingsService {
       const request = embeddingsRequestSchema.parse(input);
       requestedModel = request.model;
       resolvedModel = this.deps.modelResolver.resolve(request.model, "embeddings");
-      const appliedAppId =
-        context.subjectType === "app"
-          ? context.appId || "default"
-          : request.agumbe_guardrails_app_id || "default";
-      const policy = await this.deps.guardrailConfigService.getPolicy(context.tenantId, appliedAppId);
+
+      const requestedAppId = request.agumbe_guardrails_app_id;
+      const authAppId = context.appId;
+
+      if (authAppId && requestedAppId && authAppId !== requestedAppId) {
+        throw new AppError("API key is not allowed to use this app", {
+          statusCode: 403,
+          code: "app_mismatch",
+          type: "authentication_error",
+        });
+      }
+
+      const appliedAppId = requestedAppId ?? authAppId ?? "default";
+      const policy = await this.deps.guardrailConfigService.getPolicy(
+        context.tenantId,
+        appliedAppId,
+      );
       const prepared = this.deps.guardrailEnforcer.prepareEmbeddingsRequest(
         context,
         request,
@@ -123,6 +135,11 @@ export class EmbeddingsService {
           createdAt: new Date(),
           requestPayload: prepared.request,
           responsePayload: response,
+          workspaceId: request.agumbe_metadata?.workspace_id,
+          xnamespaceId: request.agumbe_metadata?.xnamespace_id,
+          sourceService: request.agumbe_metadata?.source_service,
+          operation: request.agumbe_metadata?.operation,
+          externalRequestId: request.agumbe_metadata?.external_request_id,
         }),
         this.deps.usageEmitter.emit({
           eventType: "llm_usage_raw",
@@ -140,6 +157,11 @@ export class EmbeddingsService {
           status: "success",
           estimatedCost,
           timestamp: new Date().toISOString(),
+          workspaceId: request.agumbe_metadata?.workspace_id,
+          xnamespaceId: request.agumbe_metadata?.xnamespace_id,
+          sourceService: request.agumbe_metadata?.source_service,
+          operation: request.agumbe_metadata?.operation,
+          externalRequestId: request.agumbe_metadata?.external_request_id,
         }),
         this.deps.billingUsageEmitter.emit({
           requestId: context.requestId,
@@ -154,6 +176,11 @@ export class EmbeddingsService {
           latencyMs,
           status: "success",
           timestamp: new Date().toISOString(),
+          workspaceId: request.agumbe_metadata?.workspace_id,
+          xnamespaceId: request.agumbe_metadata?.xnamespace_id,
+          sourceService: request.agumbe_metadata?.source_service,
+          operation: request.agumbe_metadata?.operation,
+          externalRequestId: request.agumbe_metadata?.external_request_id,
         }),
       ]);
 
@@ -170,11 +197,9 @@ export class EmbeddingsService {
           requestId: context.requestId,
           subjectType: context.subjectType,
           appId:
-            context.subjectType === "app"
-              ? context.appId || "default"
-              : typeof inputRecord?.agumbe_guardrails_app_id === "string"
-                ? inputRecord.agumbe_guardrails_app_id
-                : "default",
+            typeof inputRecord?.agumbe_guardrails_app_id === "string"
+              ? inputRecord.agumbe_guardrails_app_id
+              : context.appId || "default",
           requestKind: "embeddings",
           requestedModel,
           provider: resolvedModel?.provider || "unknown",

@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import type { ModelPricing } from "../config/env";
 import type { ProviderAdapter, ProviderName, ResolvedModel } from "../providers/types";
 import { chatRequestSchema, type ChatCompletionResponse } from "../types/chat";
-import { normalizeError, providerError } from "../utils/errors";
+import { normalizeError, providerError, AppError } from "../utils/errors";
 import { estimateCostUsd } from "../utils/pricing";
 import { BillingGuardService } from "./billing-guard.service";
 import { BillingUsageEmitterService } from "./billing-usage-emitter.service";
@@ -58,13 +58,26 @@ export class ChatService {
 
     try {
       const request = chatRequestSchema.parse(input);
+
       requestedModel = request.model;
       resolvedModel = this.deps.modelResolver.resolve(request.model, "chat");
-      const appliedAppId =
-        context.subjectType === "app"
-          ? context.appId || "default"
-          : request.agumbe_guardrails_app_id || "default";
-      const policy = await this.deps.guardrailConfigService.getPolicy(context.tenantId, appliedAppId);
+
+      const requestedAppId = request.agumbe_guardrails_app_id;
+      const authAppId = context.appId;
+
+      if (authAppId && requestedAppId && authAppId !== requestedAppId) {
+        throw new AppError("API key is not allowed to use this app", {
+          statusCode: 403,
+          code: "app_mismatch",
+          type: "authentication_error",
+        });
+      }
+
+      const appliedAppId = requestedAppId ?? authAppId ?? "default";
+      const policy = await this.deps.guardrailConfigService.getPolicy(
+        context.tenantId,
+        appliedAppId,
+      );
       const prepared = this.deps.guardrailEnforcer.prepareChatRequest(
         context,
         request,
@@ -96,6 +109,7 @@ export class ChatService {
         maxCompletionTokens: prepared.request.max_completion_tokens,
         maxOutputTokens: prepared.request.max_output_tokens,
         temperature: prepared.request.temperature,
+        responseFormat: prepared.request.response_format,
         timeoutMs: this.deps.requestTimeoutMs,
       });
       const inspectedOutput = this.deps.guardrailEnforcer.inspectChatOutput(
@@ -139,6 +153,11 @@ export class ChatService {
           requestId: context.requestId,
           subjectType: context.subjectType,
           appId: appliedAppId,
+          workspaceId: request.agumbe_metadata?.workspace_id,
+          xnamespaceId: request.agumbe_metadata?.xnamespace_id,
+          sourceService: request.agumbe_metadata?.source_service,
+          operation: request.agumbe_metadata?.operation,
+          externalRequestId: request.agumbe_metadata?.external_request_id,
           requestKind: "chat",
           requestedModel: request.model,
           provider: resolvedModel.provider,
@@ -158,6 +177,11 @@ export class ChatService {
           tenantId: context.tenantId,
           userId: context.userId,
           requestId: context.requestId,
+          workspaceId: request.agumbe_metadata?.workspace_id,
+          xnamespaceId: request.agumbe_metadata?.xnamespace_id,
+          sourceService: request.agumbe_metadata?.source_service,
+          operation: request.agumbe_metadata?.operation,
+          externalRequestId: request.agumbe_metadata?.external_request_id,
           requestKind: "chat",
           requestedModel: request.model,
           provider: resolvedModel.provider,
@@ -173,6 +197,11 @@ export class ChatService {
         this.deps.billingUsageEmitter.emit({
           requestId: context.requestId,
           tenantId: context.tenantId,
+          workspaceId: request.agumbe_metadata?.workspace_id,
+          xnamespaceId: request.agumbe_metadata?.xnamespace_id,
+          sourceService: request.agumbe_metadata?.source_service,
+          operation: request.agumbe_metadata?.operation,
+          externalRequestId: request.agumbe_metadata?.external_request_id,
           requestKind: "chat",
           requestedModel: request.model,
           provider: resolvedModel.provider,
@@ -199,11 +228,9 @@ export class ChatService {
           requestId: context.requestId,
           subjectType: context.subjectType,
           appId:
-            context.subjectType === "app"
-              ? context.appId || "default"
-              : typeof inputRecord?.agumbe_guardrails_app_id === "string"
-                ? inputRecord.agumbe_guardrails_app_id
-                : "default",
+            typeof inputRecord?.agumbe_guardrails_app_id === "string"
+              ? inputRecord.agumbe_guardrails_app_id
+              : context.appId || "default",
           requestKind: "chat",
           requestedModel,
           provider: resolvedModel?.provider || "unknown",

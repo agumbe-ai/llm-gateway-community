@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { authError } from "../utils/errors";
+import type { ApiKeyService } from "../services/api-key.service";
 
 type JwtUserPayload = JwtPayload & {
   id?: string;
@@ -35,7 +36,7 @@ function readSessionCookieToken(request: FastifyRequest): string | undefined {
   }
 }
 
-export function createRequireAuth(jwtKey: string) {
+export function createRequireAuth(jwtKey: string, apiKeyService?: ApiKeyService) {
   return async function requireAuth(
     request: FastifyRequest,
     _reply: FastifyReply,
@@ -43,6 +44,32 @@ export function createRequireAuth(jwtKey: string) {
     const token = readBearerToken(request) || readSessionCookieToken(request);
     if (!token) {
       throw authError("Missing Bearer token or session cookie");
+    }
+
+    if (token.startsWith("agk_")) {
+      if (!apiKeyService) {
+        throw authError("API key auth is not enabled");
+      }
+
+      const apiKey = await apiKeyService.resolve(token);
+      if (!apiKey || !apiKey.isActive) {
+        throw authError("Invalid API key");
+      }
+
+      request.authToken = token;
+      request.currentUser = {
+        id: apiKey.clientId,
+        email: undefined,
+        tenant_id: apiKey.tenantId,
+        tenantId: apiKey.tenantId,
+        client_key: apiKey.keyId,
+        app_id: apiKey.appId,
+      };
+      request.authContext = {
+        subjectType: "app",
+        appId: apiKey.appId,
+      };
+      return;
     }
 
     let payload: JwtUserPayload;
@@ -73,6 +100,9 @@ export function createRequireAuth(jwtKey: string) {
       tenantId: String(tenantId),
       isVerified: payload.isVerified,
       isAdmin: payload.isAdmin,
+    };
+    request.authContext = {
+      subjectType: "session",
     };
   };
 }

@@ -20,13 +20,16 @@ export function registerEmbeddingsRoutes(
           tenantId: currentUser.tenant_id,
           email: currentUser.email,
           bearerToken: request.authToken!,
-          subjectType: typeof currentUser.client_key === "string" ? "app" : "session",
+          subjectType:
+            request.authContext?.subjectType ||
+              (currentUser.email ? "session" : "app"),
           appId:
-            typeof currentUser.client_key === "string"
+            request.authContext?.appId ||
+            (typeof currentUser.client_key === "string"
               ? currentUser.client_key
               : typeof currentUser.app_id === "string"
                 ? currentUser.app_id
-                : undefined,
+                : undefined),
         },
         request.body,
       );

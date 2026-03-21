@@ -19,6 +19,8 @@ import { ModelResolver } from "./services/model-resolver";
 import { RequestLogService } from "./services/request-log.service";
 import { normalizeError, toErrorResponse } from "./utils/errors";
 import { loggerOptions } from "./utils/logger";
+import { MongoApiKeyService } from "./services/api-key.service";
+import { registerApiKeyRoutes } from "./routes/api-keys";
 
 type BuildAppOptions = {
   env: Env;
@@ -29,7 +31,8 @@ type BuildAppOptions = {
   requestLogService: RequestLogService;
 };
 
-const CORS_ALLOWED_HEADERS = "authorization, content-type, x-request-id";
+const CORS_ALLOWED_HEADERS =
+  "authorization, content-type, x-request-id, x-agumbe-workspace-id, x-agumbe-xnamespace-id, x-agumbe-source-service, x-agumbe-operation, x-agumbe-external-request-id";
 const CORS_ALLOWED_METHODS = "GET,HEAD,POST,PUT,OPTIONS";
 
 function applyCorsHeaders(request: FastifyRequest, reply: FastifyReply, allowedOrigins: Set<string>) {
@@ -56,7 +59,8 @@ export function buildApp(options: BuildAppOptions) {
       randomUUID(),
   });
 
-  const requireAuth = createRequireAuth(options.env.JWT_KEY);
+  const apiKeyService = new MongoApiKeyService();
+  const requireAuth = createRequireAuth(options.env.JWT_KEY, apiKeyService);
   const allowedOrigins = new Set(options.env.CORS_ALLOWED_ORIGINS);
 
   app.register(cookie);
@@ -117,6 +121,7 @@ export function buildApp(options: BuildAppOptions) {
     }
   });
 
+  registerApiKeyRoutes(app, apiKeyService, requireAuth);
   registerHealthRoutes(app, options.env.SERVICE_NAME);
   registerModelsRoutes(app, options.modelResolver);
   registerPlaygroundRoutes(app, options.env);

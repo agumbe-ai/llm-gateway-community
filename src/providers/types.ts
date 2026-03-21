@@ -24,6 +24,17 @@ export type ResolvedModel = {
   alias?: string;
 };
 
+export type ProviderResponseFormat =
+  | { type: "json_object" }
+  | {
+      type: "json_schema";
+      json_schema: {
+        name: string;
+        strict?: boolean;
+        [key: string]: unknown;
+      };
+    };
+
 export type ProviderChatRequest = {
   model: ResolvedModel;
   messages: ChatMessage[];
@@ -31,6 +42,7 @@ export type ProviderChatRequest = {
   maxCompletionTokens?: number;
   maxOutputTokens?: number;
   temperature?: number;
+  responseFormat?: ProviderResponseFormat;
   timeoutMs: number;
 };
 

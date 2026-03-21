@@ -6,6 +6,29 @@ export const chatMessageSchema = z.object({
   content: z.string().min(1),
 });
 
+const responseFormatSchema = z.union([
+  z.object({
+    type: z.literal("json_object"),
+  }),
+  z.object({
+    type: z.literal("json_schema"),
+    json_schema: z
+      .object({
+        name: z.string().min(1),
+        strict: z.boolean().optional(),
+      })
+      .passthrough(),
+  }),
+]);
+
+const agumbeMetadataSchema = z.object({
+  workspace_id: z.string().min(1).optional(),
+  xnamespace_id: z.string().min(1).optional(),
+  source_service: z.string().min(1).optional(),
+  operation: z.string().min(1).optional(),
+  external_request_id: z.string().min(1).optional(),
+});
+
 const rawChatRequestSchema = z
   .object({
     model: z.string().min(1),
@@ -13,6 +36,9 @@ const rawChatRequestSchema = z
     max_tokens: z.number().int().positive().optional(),
     max_completion_tokens: z.number().int().positive().optional(),
     temperature: z.number().min(0).max(2).optional(),
+    response_format: responseFormatSchema.optional(),
+    stream: z.boolean().optional(),
+    agumbe_metadata: agumbeMetadataSchema.optional(),
     agumbe_guardrails_app_id: z.string().min(1).optional(),
     agumbe_grounding_context: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
     agumbe_guardrails: guardrailPolicySchema.optional(),
@@ -30,6 +56,9 @@ export const chatRequestSchema = z
     max_completion_tokens: z.number().int().positive().optional(),
     max_output_tokens: z.number().int().positive().optional(),
     temperature: z.number().min(0).max(2).optional(),
+    response_format: responseFormatSchema.optional(),
+    stream: z.boolean().optional(),
+    agumbe_metadata: agumbeMetadataSchema.optional(),
     agumbe_guardrails_app_id: z.string().min(1).optional(),
     agumbe_grounding_context: z
       .union([z.string().min(1), z.array(z.string().min(1)).min(1)])

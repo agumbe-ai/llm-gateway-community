@@ -5,6 +5,11 @@ export type RequestLogRecord = {
   userId: string;
   subjectType?: "session" | "app";
   appId?: string;
+  workspaceId?: string;
+  xnamespaceId?: string;
+  sourceService?: string;
+  operation?: string;
+  externalRequestId?: string;
   requestId: string;
   requestKind: "chat" | "embeddings";
   requestedModel: string;
@@ -50,6 +55,11 @@ const requestLogSchema = new mongoose.Schema<RequestLogDocument>(
     requestId: { type: String, required: true, index: true },
     subjectType: { type: String, enum: ["session", "app"] },
     appId: { type: String, index: true },
+    workspaceId: { type: String, index: true },
+    xnamespaceId: { type: String, index: true },
+    sourceService: { type: String, index: true },
+    operation: { type: String, index: true },
+    externalRequestId: { type: String, index: true },
     requestKind: { type: String, enum: ["chat", "embeddings"], required: true },
     requestedModel: { type: String, required: true },
     provider: { type: String, required: true },

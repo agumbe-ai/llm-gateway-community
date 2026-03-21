@@ -6,6 +6,11 @@ export type UsageEvent = {
   tenantId: string;
   userId: string;
   requestId: string;
+  workspaceId?: string;
+  xnamespaceId?: string;
+  sourceService?: string;
+  operation?: string;
+  externalRequestId?: string;
   requestKind: RequestKind;
   requestedModel: string;
   provider: string;

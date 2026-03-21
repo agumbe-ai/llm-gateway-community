@@ -13,14 +13,6 @@ function isGpt5Model(model: string) {
   return /^gpt-5(\.|-|$)/i.test(model);
 }
 
-function flattenResponseText(outputText: unknown): string {
-  if (typeof outputText === "string") {
-    return outputText;
-  }
-
-  return "";
-}
-
 export class OpenAIProviderAdapter implements ProviderAdapter {
   readonly provider = "openai" as const;
   private readonly client: OpenAI;
@@ -30,18 +22,52 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
   }
 
   async chat(request: ProviderChatRequest): Promise<ProviderChatResult> {
-    if (isGpt5Model(request.model.upstreamModel)) {
+    const needsStructuredOutput = !!request.responseFormat;
+
+      const callChatCompletions = async () => {
+        const payload: Record<string, unknown> = {
+          model: request.model.upstreamModel,
+          messages: request.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+          max_completion_tokens: request.maxCompletionTokens ?? request.maxTokens,
+          temperature: request.temperature,
+        };
+
+        if (request.responseFormat) {
+          if (request.responseFormat.type === "json_object") {
+            payload.response_format = { type: "json_object" };
+          } else {
+            payload.response_format = {
+              type: "json_schema",
+              json_schema: request.responseFormat.json_schema,
+            };
+          }
+        }
+
+        return withTimeout(
+          this.client.chat.completions.create(payload as any),
+          request.timeoutMs,
+        );
+      };
+
+    if (isGpt5Model(request.model.upstreamModel) && !needsStructuredOutput) {
       const response = await withTimeout(
         this.client.responses.create({
           model: request.model.upstreamModel,
           input: request.messages.map((message) => ({
-            role: message.role,
+            role: message.role as any,
             content: [{ type: "input_text", text: message.content }],
           })),
-          max_output_tokens: request.maxOutputTokens ?? request.maxCompletionTokens ?? request.maxTokens,
-        }),
+          max_output_tokens:
+            request.maxOutputTokens ?? request.maxCompletionTokens ?? request.maxTokens,
+        } as any),
         request.timeoutMs,
       );
+
+      const text =
+        typeof response.output_text === "string" ? response.output_text : "";
 
       return {
         id: response.id,
@@ -49,27 +75,22 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
         model: request.model.canonicalModel,
         message: {
           role: "assistant",
-          content: response.output_text ?? "",
+          content: text,
         },
-        finishReason: response.status ?? "stop",
+        finishReason: "stop",
         usage: extractUsage(response.usage),
       };
     }
 
-    const response = await withTimeout(
-      this.client.chat.completions.create({
-        model: request.model.upstreamModel,
-        messages: request.messages.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
-        max_completion_tokens: request.maxCompletionTokens ?? request.maxTokens,
-        temperature: request.temperature,
-      }),
-      request.timeoutMs,
-    );
+    let response = await callChatCompletions();
+    let choice = response.choices[0];
+    let content = String(choice?.message?.content ?? "");
 
-    const choice = response.choices[0];
+    if (!content.trim()) {
+      response = await callChatCompletions();
+      choice = response.choices[0];
+      content = String(choice?.message?.content ?? "");
+    }
 
     return {
       id: response.id,
@@ -77,7 +98,7 @@ export class OpenAIProviderAdapter implements ProviderAdapter {
       model: request.model.canonicalModel,
       message: {
         role: "assistant",
-        content: String(choice?.message?.content ?? ""),
+        content,
       },
       finishReason: choice?.finish_reason ?? null,
       usage: extractUsage(response.usage),

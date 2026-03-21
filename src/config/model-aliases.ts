@@ -58,6 +58,12 @@ export const CURATED_MODELS: CatalogModel[] = [
     kind: "embeddings",
   },
   {
+    id: "@openai/text-embedding-3-large",
+    provider: "openai",
+    upstreamModel: "text-embedding-3-large",
+    kind: "embeddings",
+  },
+  {
     id: "@google/gemini-2.0-flash",
     provider: "google",
     upstreamModel: "gemini-2.0-flash",
@@ -71,6 +77,14 @@ export const MODEL_ALIASES: Record<string, string> = {
   "cheap-fast": "@openai/gpt-4o-mini",
   reasoning: "@anthropic/claude-sonnet-4",
   "embed-default": "@openai/text-embedding-3-small",
+  "gpt-5.4": "@openai/gpt-5.4",
+  "gpt-5.3": "@openai/gpt-5.3",
+  "gpt-5.2": "@openai/gpt-5.2",
+  "gpt-5.1": "@openai/gpt-5.1",
+  "gpt-4.1-mini": "@openai/gpt-4.1-mini",
+  "gpt-4o-mini": "@openai/gpt-4o-mini",
+  "text-embedding-3-small": "@openai/text-embedding-3-small",
+  "text-embedding-3-large": "@openai/text-embedding-3-large",
 };
 
 export function inferRequestKind(provider: ProviderName, upstreamModel: string): RequestKind {
