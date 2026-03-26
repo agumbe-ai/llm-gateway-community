@@ -3,8 +3,6 @@ import { getEnv } from "./config/env";
 import { AnthropicProviderAdapter } from "./providers/anthropic";
 import { GeminiProviderAdapter } from "./providers/gemini";
 import { OpenAIProviderAdapter } from "./providers/openai";
-import { BillingGuardService } from "./services/billing-guard.service";
-import { BillingUsageEmitterService } from "./services/billing-usage-emitter.service";
 import { ChatService } from "./services/chat.service";
 import { EmbeddingsService } from "./services/embeddings.service";
 import { GuardrailConfigService } from "./services/guardrail-config.service";
@@ -26,16 +24,8 @@ async function start() {
 
   const requestLogService = new RequestLogService(env.STORE_LLM_PAYLOADS);
   const usageEmitter = new UsageEmitterService(kafkaService, env.KAFKA_TOPIC_USAGE);
-  const billingUsageEmitter = new BillingUsageEmitterService(kafkaService, env.KAFKA_TOPIC_BILLING);
   const modelResolver = new ModelResolver();
   const guardrailConfigService = new GuardrailConfigService();
-  const billingGuardService = new BillingGuardService({
-    enabled: env.BILLING_ENFORCEMENT_ENABLED,
-    tenantsBaseUrl: env.TENANTS_BASE_URL,
-    timeoutMs: env.BILLING_TIMEOUT_MS,
-    billingPricing: env.BILLING_PRICING,
-    defaultChatMaxCompletionTokens: env.BILLING_CHAT_DEFAULT_MAX_TOKENS,
-  });
   const guardrailEnforcer = new GuardrailEnforcerService();
 
   const providers = {
@@ -49,8 +39,6 @@ async function start() {
     modelResolver,
     requestLogService,
     usageEmitter,
-    billingGuardService,
-    billingUsageEmitter,
     guardrailConfigService,
     guardrailEnforcer,
     modelPricing: env.MODEL_PRICING,
@@ -62,8 +50,6 @@ async function start() {
     modelResolver,
     requestLogService,
     usageEmitter,
-    billingGuardService,
-    billingUsageEmitter,
     guardrailConfigService,
     guardrailEnforcer,
     modelPricing: env.MODEL_PRICING,

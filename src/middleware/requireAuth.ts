@@ -56,7 +56,6 @@ export function createRequireAuth(jwtKey: string, apiKeyService?: ApiKeyService)
         throw authError("Invalid API key");
       }
 
-      request.authToken = token;
       request.currentUser = {
         id: apiKey.clientId,
         email: undefined,
@@ -91,7 +90,6 @@ export function createRequireAuth(jwtKey: string, apiKeyService?: ApiKeyService)
       throw authError("JWT missing required id or tenant_id claim");
     }
 
-    request.authToken = token;
     request.currentUser = {
       ...payload,
       id: String(userId),

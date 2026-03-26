@@ -4,8 +4,6 @@ import type { ProviderAdapter, ProviderName, ResolvedModel } from "../providers/
 import { chatRequestSchema, type ChatCompletionResponse } from "../types/chat";
 import { normalizeError, providerError, AppError } from "../utils/errors";
 import { estimateCostUsd } from "../utils/pricing";
-import { BillingGuardService } from "./billing-guard.service";
-import { BillingUsageEmitterService } from "./billing-usage-emitter.service";
 import { GuardrailConfigService } from "./guardrail-config.service";
 import { GuardrailEnforcerService } from "./guardrail-enforcer.service";
 import { ModelResolver } from "./model-resolver";
@@ -17,7 +15,6 @@ export type AuthenticatedRequestContext = {
   userId: string;
   tenantId: string;
   email?: string;
-  bearerToken: string;
   subjectType: "session" | "app";
   appId?: string;
 };
@@ -27,8 +24,6 @@ type ChatServiceDeps = {
   modelResolver: ModelResolver;
   requestLogService: RequestLogService;
   usageEmitter: UsageEmitterService;
-  billingGuardService: BillingGuardService;
-  billingUsageEmitter: BillingUsageEmitterService;
   guardrailConfigService: GuardrailConfigService;
   guardrailEnforcer: GuardrailEnforcerService;
   modelPricing: ModelPricing;
@@ -85,13 +80,6 @@ export class ChatService {
         policy,
         appliedAppId,
       );
-      await this.deps.billingGuardService.authorize({
-        requestKind: "chat",
-        context,
-        model: resolvedModel,
-        request: prepared.request,
-        bearerToken: context.bearerToken,
-      });
 
       const adapter = this.deps.providers[resolvedModel.provider];
       if (!adapter?.chat) {
@@ -192,25 +180,6 @@ export class ChatService {
           latencyMs,
           status: "success",
           estimatedCost,
-          timestamp: new Date().toISOString(),
-        }),
-        this.deps.billingUsageEmitter.emit({
-          requestId: context.requestId,
-          tenantId: context.tenantId,
-          workspaceId: request.agumbe_metadata?.workspace_id,
-          xnamespaceId: request.agumbe_metadata?.xnamespace_id,
-          sourceService: request.agumbe_metadata?.source_service,
-          operation: request.agumbe_metadata?.operation,
-          externalRequestId: request.agumbe_metadata?.external_request_id,
-          requestKind: "chat",
-          requestedModel: request.model,
-          provider: resolvedModel.provider,
-          upstreamModel: resolvedModel.upstreamModel,
-          promptTokens: usage.promptTokens,
-          completionTokens: usage.completionTokens,
-          totalTokens: usage.totalTokens,
-          latencyMs,
-          status: "success",
           timestamp: new Date().toISOString(),
         }),
       ]);
