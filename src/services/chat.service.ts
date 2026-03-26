@@ -119,10 +119,9 @@ export class ChatService {
           "unsupported_provider",
         );
       }
-      const chatAdapter = adapter.chat;
 
       const providerMeasured = await measureAsync(() =>
-        chatAdapter({
+        adapter.chat!({
           model: resolved,
           messages: prepared.request.messages,
           maxTokens: prepared.request.max_tokens,

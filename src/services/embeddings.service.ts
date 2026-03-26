@@ -108,10 +108,9 @@ export class EmbeddingsService {
           "unsupported_provider",
         );
       }
-      const embeddingsAdapter = adapter.embeddings;
 
       const providerMeasured = await measureAsync(() =>
-        embeddingsAdapter({
+        adapter.embeddings!({
           model: resolved,
           input: prepared.request.input,
           timeoutMs: this.deps.requestTimeoutMs,
