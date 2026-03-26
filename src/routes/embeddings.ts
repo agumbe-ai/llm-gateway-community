@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { EmbeddingsService } from "../services/embeddings.service";
+import { setTimingHeaders } from "../utils/timing";
 
 export function registerEmbeddingsRoutes(
   app: FastifyInstance,
@@ -11,9 +12,9 @@ export function registerEmbeddingsRoutes(
     {
       preHandler: requireAuth,
     },
-    async (request) => {
+    async (request, reply) => {
       const currentUser = request.currentUser!;
-      return embeddingsService.createEmbeddings(
+      const result = await embeddingsService.createEmbeddings(
         {
           requestId: request.id,
           userId: currentUser.id,
@@ -32,6 +33,8 @@ export function registerEmbeddingsRoutes(
         },
         request.body,
       );
+      setTimingHeaders(reply, result.timings);
+      return result.response;
     },
   );
 }

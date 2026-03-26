@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { ChatService } from "../services/chat.service";
+import { setTimingHeaders } from "../utils/timing";
 
 export function registerChatRoutes(
   app: FastifyInstance,
@@ -11,9 +12,9 @@ export function registerChatRoutes(
     {
       preHandler: requireAuth,
     },
-    async (request) => {
+    async (request, reply) => {
       const currentUser = request.currentUser!;
-      return chatService.createCompletion(
+      const result = await chatService.createCompletion(
         {
           requestId: request.id,
           userId: currentUser.id,
@@ -32,6 +33,8 @@ export function registerChatRoutes(
         },
         request.body,
       );
+      setTimingHeaders(reply, result.timings);
+      return result.response;
     },
   );
 }
