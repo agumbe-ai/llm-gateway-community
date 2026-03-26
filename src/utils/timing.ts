@@ -16,6 +16,7 @@ export type GatewayTimingBreakdown = {
 export type TimedResult<T> = {
   response: T;
   timings: GatewayTimingBreakdown;
+  estimatedCostUsd?: number;
 };
 
 const TIMING_HEADERS: Record<keyof GatewayTimingBreakdown, string> = {
@@ -30,6 +31,8 @@ const TIMING_HEADERS: Record<keyof GatewayTimingBreakdown, string> = {
   sideEffectsMs: "x-agumbe-timing-side-effects-ms",
   gatewayOverheadMs: "x-agumbe-timing-gateway-overhead-ms",
 };
+
+export const ESTIMATED_COST_USD_HEADER = "x-agumbe-estimated-cost-usd";
 
 export function measureSync<T>(fn: () => T): { result: T; elapsedMs: number } {
   const startedAt = Date.now();
@@ -59,4 +62,12 @@ export function setTimingHeaders(reply: FastifyReply, timings: GatewayTimingBrea
   >) {
     reply.header(headerName, String(timings[key]));
   }
+}
+
+export function setEstimatedCostHeader(reply: FastifyReply, estimatedCostUsd?: number) {
+  if (typeof estimatedCostUsd !== "number" || Number.isNaN(estimatedCostUsd)) {
+    return;
+  }
+
+  reply.header(ESTIMATED_COST_USD_HEADER, String(estimatedCostUsd));
 }

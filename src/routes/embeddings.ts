@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { EmbeddingsService } from "../services/embeddings.service";
-import { setTimingHeaders } from "../utils/timing";
+import { setEstimatedCostHeader, setTimingHeaders } from "../utils/timing";
 
 export function registerEmbeddingsRoutes(
   app: FastifyInstance,
@@ -34,6 +34,7 @@ export function registerEmbeddingsRoutes(
         request.body,
       );
       setTimingHeaders(reply, result.timings);
+      setEstimatedCostHeader(reply, result.estimatedCostUsd);
       return result.response;
     },
   );

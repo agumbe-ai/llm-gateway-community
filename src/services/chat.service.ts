@@ -250,6 +250,7 @@ export class ChatService {
       return {
         response,
         timings,
+        estimatedCostUsd: estimatedCost,
       };
     } catch (error) {
       const normalized = normalizeError(error);

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { ChatService } from "../services/chat.service";
-import { setTimingHeaders } from "../utils/timing";
+import { setEstimatedCostHeader, setTimingHeaders } from "../utils/timing";
 
 export function registerChatRoutes(
   app: FastifyInstance,
@@ -34,6 +34,7 @@ export function registerChatRoutes(
         request.body,
       );
       setTimingHeaders(reply, result.timings);
+      setEstimatedCostHeader(reply, result.estimatedCostUsd);
       return result.response;
     },
   );
