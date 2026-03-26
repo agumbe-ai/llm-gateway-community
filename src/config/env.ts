@@ -25,7 +25,6 @@ export type Env = {
   SERVICE_NAME: string;
   LOG_LEVEL: string;
   CORS_ALLOWED_ORIGINS: string[];
-  AUTH_BASE_URL: string;
   TENANTS_BASE_URL?: string;
   MONGO_URI: string;
   JWT_KEY: string;
@@ -75,7 +74,6 @@ export function getEnv(): Env {
     SERVICE_NAME: z.string().default("llm-gateway"),
     LOG_LEVEL: z.string().default("info"),
     CORS_ALLOWED_ORIGINS: z.string().default("https://agumbe.ai"),
-    AUTH_BASE_URL: z.string().url().default("https://development.agumbe.dev"),
     TENANTS_BASE_URL: z.string().url().optional(),
     MONGO_URI: z.string().min(1, "MONGO_URI is required"),
     JWT_KEY: z.string().min(1, "JWT_KEY is required"),
@@ -121,7 +119,6 @@ export function getEnv(): Env {
     SERVICE_NAME: raw.SERVICE_NAME,
     LOG_LEVEL: raw.LOG_LEVEL,
     CORS_ALLOWED_ORIGINS: splitCsv(raw.CORS_ALLOWED_ORIGINS),
-    AUTH_BASE_URL: raw.AUTH_BASE_URL,
     TENANTS_BASE_URL: raw.TENANTS_BASE_URL,
     MONGO_URI: raw.MONGO_URI,
     JWT_KEY: raw.JWT_KEY,

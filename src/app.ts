@@ -10,7 +10,6 @@ import { registerEmbeddingsRoutes } from "./routes/embeddings";
 import { registerGuardrailRoutes } from "./routes/guardrails";
 import { registerHealthRoutes } from "./routes/health";
 import { registerModelsRoutes } from "./routes/models";
-import { registerPlaygroundRoutes } from "./routes/playground";
 import { registerRequestRoutes } from "./routes/requests";
 import { ChatService } from "./services/chat.service";
 import { EmbeddingsService } from "./services/embeddings.service";
@@ -124,7 +123,6 @@ export function buildApp(options: BuildAppOptions) {
   registerApiKeyRoutes(app, apiKeyService, requireAuth);
   registerHealthRoutes(app, options.env.SERVICE_NAME);
   registerModelsRoutes(app, options.modelResolver);
-  registerPlaygroundRoutes(app, options.env);
   registerGuardrailRoutes(app, options.guardrailConfigService, requireAuth);
   registerRequestRoutes(app, options.requestLogService, requireAuth);
   registerChatRoutes(app, options.chatService, requireAuth);
