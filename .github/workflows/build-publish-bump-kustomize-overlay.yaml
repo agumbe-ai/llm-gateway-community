@@ -21,14 +21,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Print all env vars
-        run: |
-          echo "PROJECT_ID = $PROJECT_ID"
-          echo "REGION     = $REGION"
-          echo "GCP_SA_KEY = $GCP_SA_KEY"
-          echo "IMAGE_NAME = $IMAGE_NAME"
-          echo "IMAGE_TAG  = $IMAGE_TAG"
-
       - id: auth
         uses: google-github-actions/auth@v1
         with:
