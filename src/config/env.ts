@@ -23,6 +23,9 @@ export type ModelPricing = z.infer<typeof pricingSchema>;
 export type Env = {
   PORT: number;
   SERVICE_NAME: string;
+  OTEL_SERVICE_NAME: string;
+  OTEL_SERVICE_VERSION: string;
+  DEPLOYMENT_ENVIRONMENT: string;
   LOG_LEVEL: string;
   CORS_ALLOWED_ORIGINS: string[];
   MONGO_URI: string;
@@ -43,6 +46,15 @@ export type Env = {
   RATE_LIMIT_MAX: number;
   RATE_LIMIT_WINDOW: string;
   STORE_LLM_PAYLOADS: boolean;
+  OTEL_ENABLED: boolean;
+  OTEL_EXPORTER_OTLP_PROTOCOL: string;
+  OTEL_EXPORTER_OTLP_ENDPOINT: string;
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?: string;
+  OTEL_EXPORTER_OTLP_METRICS_ENDPOINT?: string;
+  OTEL_RESOURCE_ATTRIBUTES: string;
+  OTEL_CAPTURE_GENAI_EVENTS: boolean;
+  OTEL_TRACES_SAMPLER: string;
+  OTEL_TRACES_SAMPLER_ARG?: string;
   MODEL_PRICING: ModelPricing;
 };
 
@@ -66,6 +78,9 @@ export function getEnv(): Env {
   const schema = z.object({
     PORT: z.coerce.number().int().positive().default(3000),
     SERVICE_NAME: z.string().default("llm-gateway"),
+    OTEL_SERVICE_NAME: z.string().default("llm-gateway"),
+    OTEL_SERVICE_VERSION: z.string().default(process.env.npm_package_version || "0.1.0"),
+    DEPLOYMENT_ENVIRONMENT: z.string().default(process.env.NODE_ENV || "development"),
     LOG_LEVEL: z.string().default("info"),
     CORS_ALLOWED_ORIGINS: z.string().default("https://agumbe.ai"),
     MONGO_URI: z.string().min(1, "MONGO_URI is required"),
@@ -88,6 +103,15 @@ export function getEnv(): Env {
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
     RATE_LIMIT_WINDOW: z.string().default("1 minute"),
     STORE_LLM_PAYLOADS: booleanString.default("false").transform(Boolean),
+    OTEL_ENABLED: booleanString.default("false").transform(Boolean),
+    OTEL_EXPORTER_OTLP_PROTOCOL: z.string().default("http/protobuf"),
+    OTEL_EXPORTER_OTLP_ENDPOINT: z.string().default("http://localhost:4318"),
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: z.string().optional(),
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: z.string().optional(),
+    OTEL_RESOURCE_ATTRIBUTES: z.string().default(""),
+    OTEL_CAPTURE_GENAI_EVENTS: booleanString.default("false").transform(Boolean),
+    OTEL_TRACES_SAMPLER: z.string().default("parentbased_always_on"),
+    OTEL_TRACES_SAMPLER_ARG: z.string().optional(),
     MODEL_PRICING_JSON: z.string().default("{}"),
   });
 
@@ -101,6 +125,9 @@ export function getEnv(): Env {
   return {
     PORT: raw.PORT,
     SERVICE_NAME: raw.SERVICE_NAME,
+    OTEL_SERVICE_NAME: raw.OTEL_SERVICE_NAME,
+    OTEL_SERVICE_VERSION: raw.OTEL_SERVICE_VERSION,
+    DEPLOYMENT_ENVIRONMENT: raw.DEPLOYMENT_ENVIRONMENT,
     LOG_LEVEL: raw.LOG_LEVEL,
     CORS_ALLOWED_ORIGINS: splitCsv(raw.CORS_ALLOWED_ORIGINS),
     MONGO_URI: raw.MONGO_URI,
@@ -121,6 +148,15 @@ export function getEnv(): Env {
     RATE_LIMIT_MAX: raw.RATE_LIMIT_MAX,
     RATE_LIMIT_WINDOW: raw.RATE_LIMIT_WINDOW,
     STORE_LLM_PAYLOADS: raw.STORE_LLM_PAYLOADS,
+    OTEL_ENABLED: raw.OTEL_ENABLED,
+    OTEL_EXPORTER_OTLP_PROTOCOL: raw.OTEL_EXPORTER_OTLP_PROTOCOL,
+    OTEL_EXPORTER_OTLP_ENDPOINT: raw.OTEL_EXPORTER_OTLP_ENDPOINT,
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: raw.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: raw.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+    OTEL_RESOURCE_ATTRIBUTES: raw.OTEL_RESOURCE_ATTRIBUTES,
+    OTEL_CAPTURE_GENAI_EVENTS: raw.OTEL_CAPTURE_GENAI_EVENTS,
+    OTEL_TRACES_SAMPLER: raw.OTEL_TRACES_SAMPLER,
+    OTEL_TRACES_SAMPLER_ARG: raw.OTEL_TRACES_SAMPLER_ARG,
     MODEL_PRICING: parsePricing(raw.MODEL_PRICING_JSON),
   };
 }

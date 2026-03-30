@@ -1,21 +1,41 @@
-import { buildApp } from "./app";
 import { getEnv } from "./config/env";
-import { AnthropicProviderAdapter } from "./providers/anthropic";
-import { GeminiProviderAdapter } from "./providers/gemini";
-import { OpenAIProviderAdapter } from "./providers/openai";
-import { ChatService } from "./services/chat.service";
-import { EmbeddingsService } from "./services/embeddings.service";
-import { GuardrailConfigService } from "./services/guardrail-config.service";
-import { GuardrailEnforcerService } from "./services/guardrail-enforcer.service";
-import { KafkaService } from "./services/kafka";
-import { ModelResolver } from "./services/model-resolver";
-import { closeMongo, connectMongo } from "./services/mongo";
-import { RequestLogService } from "./services/request-log.service";
-import { UsageEmitterService } from "./services/usage-emitter.service";
-import { logger } from "./utils/logger";
+import { shutdownObservability, startObservability } from "./observability";
 
 async function start() {
   const env = getEnv();
+  await startObservability(env);
+
+  const [
+    { buildApp },
+    { AnthropicProviderAdapter },
+    { GeminiProviderAdapter },
+    { OpenAIProviderAdapter },
+    { ChatService },
+    { EmbeddingsService },
+    { GuardrailConfigService },
+    { GuardrailEnforcerService },
+    { KafkaService },
+    { ModelResolver },
+    { closeMongo, connectMongo },
+    { RequestLogService },
+    { UsageEmitterService },
+    { logger },
+  ] = await Promise.all([
+    import("./app"),
+    import("./providers/anthropic"),
+    import("./providers/gemini"),
+    import("./providers/openai"),
+    import("./services/chat.service"),
+    import("./services/embeddings.service"),
+    import("./services/guardrail-config.service"),
+    import("./services/guardrail-enforcer.service"),
+    import("./services/kafka"),
+    import("./services/model-resolver"),
+    import("./services/mongo"),
+    import("./services/request-log.service"),
+    import("./services/usage-emitter.service"),
+    import("./utils/logger"),
+  ]);
 
   await connectMongo(env.MONGO_URI);
 
@@ -70,6 +90,7 @@ async function start() {
     await app.close();
     await closeMongo();
     kafkaService.close();
+    await shutdownObservability();
     process.exit(0);
   };
 
@@ -89,7 +110,8 @@ async function start() {
   logger.info({ address }, "llm-gateway listening");
 }
 
-start().catch((error) => {
-  logger.error({ err: error }, "failed to start llm-gateway");
+start().catch(async (error) => {
+  console.error("failed to start llm-gateway", error);
+  await shutdownObservability().catch(() => undefined);
   process.exit(1);
 });

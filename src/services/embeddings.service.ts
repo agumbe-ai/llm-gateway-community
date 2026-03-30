@@ -1,7 +1,25 @@
+import type { Attributes } from "@opentelemetry/api";
 import type { ModelPricing } from "../config/env";
 import type { ProviderAdapter, ProviderName, ResolvedModel } from "../providers/types";
+import {
+  recordEstimatedCost,
+  recordGuardrailLatency,
+  recordPolicyBlock,
+  recordProviderLatency,
+  recordRequest,
+  recordRequestError,
+  recordRequestLogLatency,
+  recordTokenUsage,
+  recordUsageEmitLatency,
+} from "../telemetry/metrics";
+import {
+  addActiveSpanEvent,
+  setActiveSpanAttributes,
+  withSpan,
+  withSpanSync,
+} from "../telemetry/tracing";
 import { embeddingsRequestSchema, type EmbeddingsResponse } from "../types/embeddings";
-import { normalizeError, providerError, AppError } from "../utils/errors";
+import { AppError, normalizeError, providerError } from "../utils/errors";
 import { estimateCostUsd } from "../utils/pricing";
 import {
   measureAsync,
@@ -33,6 +51,10 @@ const ZERO_USAGE = {
   totalTokens: 0,
 };
 
+function isPolicyBlockedCode(code?: string) {
+  return typeof code === "string" && code.startsWith("guardrail_");
+}
+
 export class EmbeddingsService {
   constructor(private readonly deps: EmbeddingsServiceDeps) {}
 
@@ -47,7 +69,16 @@ export class EmbeddingsService {
         : undefined;
     let requestedModel = typeof rawModel === "string" ? rawModel : "unknown";
     let resolvedModel: ResolvedModel | undefined;
-    let timings: GatewayTimingBreakdown | undefined;
+    let policySet = context.appId || "default";
+
+    const buildMetricAttributes = (overrides?: Attributes): Attributes => ({
+      route_kind: "embeddings",
+      provider: resolvedModel?.provider || "unknown",
+      model: resolvedModel?.canonicalModel || requestedModel,
+      request_mode: "sync",
+      policy_set: policySet,
+      ...overrides,
+    });
 
     try {
       let modelResolveMs = 0;
@@ -60,12 +91,20 @@ export class EmbeddingsService {
 
       const request = embeddingsRequestSchema.parse(input);
       requestedModel = request.model;
-      const resolvedModelMeasured = measureSync(() =>
-        this.deps.modelResolver.resolve(request.model, "embeddings"),
+
+      const resolvedModelMeasured = withSpanSync("model.resolve", () =>
+        measureSync(() =>
+          this.deps.modelResolver.resolve(request.model, "embeddings"),
+        ),
       );
       const resolved = resolvedModelMeasured.result;
       resolvedModel = resolved;
       modelResolveMs = resolvedModelMeasured.elapsedMs;
+
+      setActiveSpanAttributes({
+        "provider.name": resolved.provider,
+        "gen_ai.response.model": resolved.canonicalModel,
+      });
 
       const requestedAppId = request.agumbe_guardrails_app_id;
       const authAppId = context.appId;
@@ -79,22 +118,32 @@ export class EmbeddingsService {
       }
 
       const appliedAppId = requestedAppId ?? authAppId ?? "default";
-      const policyMeasured = await measureAsync(() =>
-        this.deps.guardrailConfigService.getPolicy(
-          context.tenantId,
-          appliedAppId,
+      policySet = appliedAppId;
+      setActiveSpanAttributes({
+        "agumbe.app_id": appliedAppId,
+        "agumbe.policy_set": appliedAppId,
+      });
+
+      const policyMeasured = await withSpan("guardrails.config.load", () =>
+        measureAsync(() =>
+          this.deps.guardrailConfigService.getPolicy(
+            context.tenantId,
+            appliedAppId,
+          ),
         ),
       );
       const policy = policyMeasured.result;
       guardrailConfigMs = policyMeasured.elapsedMs;
 
-      const preparedMeasured = measureSync(() =>
-        this.deps.guardrailEnforcer.prepareEmbeddingsRequest(
-          context,
-          request,
-          resolved,
-          policy,
-          appliedAppId,
+      const preparedMeasured = withSpanSync("guardrails.input.prepare", () =>
+        measureSync(() =>
+          this.deps.guardrailEnforcer.prepareEmbeddingsRequest(
+            context,
+            request,
+            resolved,
+            policy,
+            appliedAppId,
+          ),
         ),
       );
       const prepared = preparedMeasured.result;
@@ -109,12 +158,14 @@ export class EmbeddingsService {
         );
       }
 
-      const providerMeasured = await measureAsync(() =>
-        adapter.embeddings!({
-          model: resolved,
-          input: prepared.request.input,
-          timeoutMs: this.deps.requestTimeoutMs,
-        }),
+      const providerMeasured = await withSpan("provider.request", () =>
+        measureAsync(() =>
+          adapter.embeddings!({
+            model: resolved,
+            input: prepared.request.input,
+            timeoutMs: this.deps.requestTimeoutMs,
+          }),
+        ),
       );
       const result = providerMeasured.result;
       providerMs = providerMeasured.elapsedMs;
@@ -139,58 +190,62 @@ export class EmbeddingsService {
 
       const sideEffectsStartedAt = Date.now();
       await Promise.allSettled([
-        measureAsync(() =>
-          this.deps.requestLogService.log({
-            tenantId: context.tenantId,
-            userId: context.userId,
-            requestId: context.requestId,
-            subjectType: context.subjectType,
-            appId: appliedAppId,
-            requestKind: "embeddings",
-            requestedModel: request.model,
-            provider: resolved.provider,
-            upstreamModel: resolved.upstreamModel,
-            status: "success",
-            latencyMs,
-            promptTokens: usage.promptTokens,
-            completionTokens: 0,
-            totalTokens: usage.totalTokens,
-            estimatedCost,
-            createdAt: new Date(),
-            requestPayload: prepared.request,
-            responsePayload: response,
-            workspaceId: request.agumbe_metadata?.workspace_id,
-            xnamespaceId: request.agumbe_metadata?.xnamespace_id,
-            sourceService: request.agumbe_metadata?.source_service,
-            operation: request.agumbe_metadata?.operation,
-            externalRequestId: request.agumbe_metadata?.external_request_id,
-          }),
+        withSpan("request_log.write", () =>
+          measureAsync(() =>
+            this.deps.requestLogService.log({
+              tenantId: context.tenantId,
+              userId: context.userId,
+              requestId: context.requestId,
+              subjectType: context.subjectType,
+              appId: appliedAppId,
+              requestKind: "embeddings",
+              requestedModel: request.model,
+              provider: resolved.provider,
+              upstreamModel: resolved.upstreamModel,
+              status: "success",
+              latencyMs,
+              promptTokens: usage.promptTokens,
+              completionTokens: 0,
+              totalTokens: usage.totalTokens,
+              estimatedCost,
+              createdAt: new Date(),
+              requestPayload: prepared.request,
+              responsePayload: response,
+              workspaceId: request.agumbe_metadata?.workspace_id,
+              xnamespaceId: request.agumbe_metadata?.xnamespace_id,
+              sourceService: request.agumbe_metadata?.source_service,
+              operation: request.agumbe_metadata?.operation,
+              externalRequestId: request.agumbe_metadata?.external_request_id,
+            }),
+          ),
         ).then((measured) => {
           requestLogMs = measured.elapsedMs;
         }),
-        measureAsync(() =>
-          this.deps.usageEmitter.emit({
-            eventType: "llm_usage_raw",
-            tenantId: context.tenantId,
-            userId: context.userId,
-            requestId: context.requestId,
-            requestKind: "embeddings",
-            requestedModel: request.model,
-            provider: resolved.provider,
-            upstreamModel: resolved.upstreamModel,
-            promptTokens: usage.promptTokens,
-            completionTokens: 0,
-            totalTokens: usage.totalTokens,
-            latencyMs,
-            status: "success",
-            estimatedCost,
-            timestamp: new Date().toISOString(),
-            workspaceId: request.agumbe_metadata?.workspace_id,
-            xnamespaceId: request.agumbe_metadata?.xnamespace_id,
-            sourceService: request.agumbe_metadata?.source_service,
-            operation: request.agumbe_metadata?.operation,
-            externalRequestId: request.agumbe_metadata?.external_request_id,
-          }),
+        withSpan("usage_event.emit", () =>
+          measureAsync(() =>
+            this.deps.usageEmitter.emit({
+              eventType: "llm_usage_raw",
+              tenantId: context.tenantId,
+              userId: context.userId,
+              requestId: context.requestId,
+              requestKind: "embeddings",
+              requestedModel: request.model,
+              provider: resolved.provider,
+              upstreamModel: resolved.upstreamModel,
+              promptTokens: usage.promptTokens,
+              completionTokens: 0,
+              totalTokens: usage.totalTokens,
+              latencyMs,
+              status: "success",
+              estimatedCost,
+              timestamp: new Date().toISOString(),
+              workspaceId: request.agumbe_metadata?.workspace_id,
+              xnamespaceId: request.agumbe_metadata?.xnamespace_id,
+              sourceService: request.agumbe_metadata?.source_service,
+              operation: request.agumbe_metadata?.operation,
+              externalRequestId: request.agumbe_metadata?.external_request_id,
+            }),
+          ),
         ).then((measured) => {
           usageEmitMs = measured.elapsedMs;
         }),
@@ -198,7 +253,7 @@ export class EmbeddingsService {
       sideEffectsMs = Date.now() - sideEffectsStartedAt;
 
       const totalMs = Date.now() - startedAt;
-      timings = {
+      const timings: GatewayTimingBreakdown = {
         totalMs,
         modelResolveMs,
         guardrailConfigMs,
@@ -211,6 +266,19 @@ export class EmbeddingsService {
         gatewayOverheadMs: Math.max(0, totalMs - providerMs),
       };
 
+      const metricAttributes = buildMetricAttributes();
+      recordRequest(metricAttributes, totalMs);
+      recordProviderLatency(metricAttributes, providerMs);
+      recordGuardrailLatency(metricAttributes, guardrailConfigMs, "config_load");
+      recordGuardrailLatency(metricAttributes, guardrailInputMs, "input_prepare");
+      recordRequestLogLatency(metricAttributes, requestLogMs);
+      recordUsageEmitLatency(metricAttributes, usageEmitMs);
+      recordTokenUsage(metricAttributes, usage.promptTokens, 0);
+      recordEstimatedCost(metricAttributes, estimatedCost);
+      addActiveSpanEvent("request.completed", {
+        "gen_ai.usage.input_tokens": usage.promptTokens,
+      });
+
       return {
         response,
         timings,
@@ -220,6 +288,11 @@ export class EmbeddingsService {
       const normalized = normalizeError(error);
       const latencyMs = Date.now() - startedAt;
       const inputRecord = input && typeof input === "object" ? (input as Record<string, unknown>) : null;
+      policySet =
+        (typeof inputRecord?.agumbe_guardrails_app_id === "string"
+          ? inputRecord.agumbe_guardrails_app_id
+          : undefined) ||
+        policySet;
 
       await Promise.allSettled([
         this.deps.requestLogService.log({
@@ -264,6 +337,19 @@ export class EmbeddingsService {
           timestamp: new Date().toISOString(),
         }),
       ]);
+
+      const metricAttributes = buildMetricAttributes({
+        error_code: normalized.code,
+      });
+      recordRequest(metricAttributes, latencyMs);
+      recordRequestError(metricAttributes);
+      if (isPolicyBlockedCode(normalized.code)) {
+        recordPolicyBlock(metricAttributes);
+      }
+      addActiveSpanEvent("request.failed", {
+        "error.type": normalized.type,
+        "error.code": normalized.code,
+      });
 
       throw normalized;
     }
