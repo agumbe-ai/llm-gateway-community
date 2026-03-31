@@ -48,8 +48,12 @@ type CacheEntry = {
 
 export class GuardrailConfigService {
   private readonly cache = new Map<string, CacheEntry>();
+  private readonly memoryStore = new Map<string, Required<GuardrailPolicy>>();
 
-  constructor(private readonly cacheTtlMs = 30_000) {}
+  constructor(
+    private readonly cacheTtlMs = 30_000,
+    private readonly persistenceEnabled = true,
+  ) {}
 
   async getPolicy(tenantId: string, appId: string) {
     const key = `${tenantId}:${appId}`;
@@ -59,8 +63,12 @@ export class GuardrailConfigService {
       return structuredClone(cached.value);
     }
 
-    const document = await GuardrailConfigModel.findOne({ tenantId, appId }).lean<GuardrailConfigRecord | null>();
-    const merged = this.normalizeSettings(document?.settings);
+    const document = this.persistenceEnabled
+      ? await GuardrailConfigModel.findOne({ tenantId, appId }).lean<GuardrailConfigRecord | null>()
+      : null;
+    const merged = this.normalizeSettings(
+      document?.settings || this.memoryStore.get(key),
+    );
 
     this.cache.set(key, {
       expiresAt: Date.now() + this.cacheTtlMs,
@@ -78,6 +86,15 @@ export class GuardrailConfigService {
   }) {
     const normalized = this.normalizeSettings(params.settings);
     const now = new Date();
+
+    if (!this.persistenceEnabled) {
+      this.memoryStore.set(`${params.tenantId}:${params.appId}`, normalized);
+      this.cache.set(`${params.tenantId}:${params.appId}`, {
+        expiresAt: Date.now() + this.cacheTtlMs,
+        value: normalized,
+      });
+      return structuredClone(normalized);
+    }
 
     await GuardrailConfigModel.updateOne(
       { tenantId: params.tenantId, appId: params.appId },
@@ -122,4 +139,3 @@ export class GuardrailConfigService {
     };
   }
 }
-

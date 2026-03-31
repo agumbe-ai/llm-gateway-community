@@ -35,7 +35,7 @@ import { RequestLogService } from "./request-log.service";
 import { UsageEmitterService } from "./usage-emitter.service";
 
 type EmbeddingsServiceDeps = {
-  providers: Record<ProviderName, ProviderAdapter>;
+  providers: Partial<Record<ProviderName, ProviderAdapter>>;
   modelResolver: ModelResolver;
   requestLogService: RequestLogService;
   usageEmitter: UsageEmitterService;

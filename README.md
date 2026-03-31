@@ -1,120 +1,153 @@
-# llm-gateway
+# llm-gateway-community
 
-`llm-gateway` is a compatibility-first Agumbe core service for LLM inference. It exposes OpenAI-style chat and embeddings endpoints, resolves Agumbe aliases like `smart-default`, routes to provider-native adapters, logs request metadata to MongoDB, and emits raw usage events to Kafka.
+`llm-gateway-community` is a community edition of the gateway: an OpenAI-compatible HTTP service for chat completions and embeddings with provider routing, optional guardrails, request logging, and usage telemetry.
 
-## Reused Agumbe conventions
+It is designed to run in a lightweight local setup:
 
-- JWT payload shape matches the existing auth service: `id`, `email`, `tenant_id`, `isVerified`, `isAdmin`
-- Mongo connectivity uses the same single-process Mongoose connection pattern used by nearby services
-- Kafka publishing follows the existing cached producer style used in `auth`, `tenants`, and `codegen`
-- Kubernetes manifests mirror the current `*-depl` / `*-srv` naming and `mongodb-secret` / `auth-jwt-secret` secret wiring
+- auth can be disabled for local and single-tenant use
+- MongoDB is optional
+- Kafka is optional
+- provider adapters are enabled only when their API keys are configured
 
-## Endpoints
+## Community edition scope
+
+This package keeps the inference gateway core public and usable:
 
 - `POST /api/v1/llm/chat/completions`
 - `POST /api/v1/llm/embeddings`
 - `GET /api/v1/llm/models`
 - `GET /healthz`
 
-## Public model syntax
+Optional management routes remain available when auth and storage are configured:
 
-Provider-qualified:
+- `GET /api/v1/llm/guardrails`
+- `PUT /api/v1/llm/guardrails`
+- `GET /api/v1/llm/requests`
+- `POST /api/v1/internal/api-keys`
+- `DELETE /api/v1/internal/api-keys/:keyId`
+
+## Install
+
+```bash
+npm install
+cp .env.example .env
+npm run build
+npm run start:prod
+```
+
+You can also run the published package as a CLI:
+
+```bash
+npx @agumbe/llm-gateway-community
+```
+
+## Quick start
+
+The simplest local setup uses no auth, no MongoDB, and a single provider key:
+
+```env
+PORT=3000
+AUTH_MODE=none
+OPENAI_API_KEY=your-key-here
+```
+
+Then start the server:
+
+```bash
+npm start
+```
+
+Example request:
+
+```bash
+curl http://localhost:3000/api/v1/llm/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "@openai/gpt-4.1-mini",
+    "messages": [
+      { "role": "user", "content": "Say hello from the community gateway." }
+    ]
+  }'
+```
+
+## Auth modes
+
+`AUTH_MODE=none`
+
+- recommended for local development and simple trusted deployments
+- the gateway injects a default user and tenant from `AUTH_DEFAULT_USER_ID` and `AUTH_DEFAULT_TENANT_ID`
+
+`AUTH_MODE=jwt`
+
+- requires `JWT_KEY`
+- expects a JWT with `id` or `sub`, plus `tenant_id` or `tenantId`
+- also supports API-key auth backed by MongoDB when `MONGO_URI` is set
+
+## Storage and telemetry
+
+Without `MONGO_URI`:
+
+- guardrail policies are kept in memory
+- request logs are kept in memory for the current process
+- API-key management routes are not registered
+
+With `MONGO_URI`:
+
+- guardrail policies persist in MongoDB
+- request logs persist in MongoDB
+- API-key management routes are enabled
+
+With `KAFKA_ENABLED=true`:
+
+- usage events are emitted to `KAFKA_TOPIC_USAGE`
+
+## Supported model syntax
+
+Provider-qualified examples:
 
 - `@openai/gpt-5.4`
-- `@openai/gpt-5.3`
-- `@openai/gpt-5.2`
-- `@openai/gpt-5.1`
 - `@openai/gpt-4.1-mini`
 - `@openai/gpt-4o-mini`
 - `@openai/text-embedding-3-small`
 - `@anthropic/claude-sonnet-4`
 
-Agumbe aliases:
+Curated aliases:
 
 - `smart-default -> @openai/gpt-4.1-mini`
 - `cheap-fast -> @openai/gpt-4o-mini`
 - `reasoning -> @anthropic/claude-sonnet-4`
 - `embed-default -> @openai/text-embedding-3-small`
 
-Model resolution rules:
+If a provider is not configured, requests for that provider return a clear unsupported-provider error.
 
-- `@openai/...` resolves to provider `openai`
-- `@anthropic/...` resolves to provider `anthropic`
-- `@google/...` resolves to provider `google` (Gemini scaffold only in this MVP)
-- unqualified values are treated as Agumbe aliases
-- chat routes reject embeddings-only models
-- embeddings routes reject chat-only models
+## Environment
 
-## Provider translation
-
-The public API stays compatibility-first, but the adapters stay provider-native:
-
-- OpenAI chat strips the provider prefix and forwards the request to `chat.completions.create`
-- Anthropic chat combines system messages into top-level `system`, maps the rest into Anthropic Messages API format, and normalizes the response back to an OpenAI-style shape
-- OpenAI embeddings strip the provider prefix and normalize the embeddings response back to OpenAI-compatible output
-- Gemini is scaffolded in `src/providers/gemini.ts` and currently returns a clear not-enabled error
-
-## Mongo logging
-
-Each inference request writes a record to the `llm_requests` collection with:
-
-- `tenantId`
-- `userId`
-- `requestId`
-- `requestKind`
-- `requestedModel`
-- `provider`
-- `upstreamModel`
-- `status`
-- `latencyMs`
-- `promptTokens`
-- `completionTokens`
-- `totalTokens`
-- `estimatedCost`
-- `errorCode`
-- `createdAt`
-
-Full request and response payload storage is off by default and can be enabled with `STORE_LLM_PAYLOADS=true`.
-
-## Kafka usage events
-
-Success and failure both emit to `KAFKA_TOPIC_USAGE` (default `llm_usage_raw`) with:
-
-- `eventType`
-- `tenantId`
-- `userId`
-- `requestId`
-- `requestKind`
-- `requestedModel`
-- `provider`
-- `upstreamModel`
-- `promptTokens`
-- `completionTokens`
-- `totalTokens`
-- `latencyMs`
-- `status`
-- `estimatedCost`
-- `errorCode`
-- `timestamp`
-
-## Environment variables
-
-Required:
-
-- `MONGO_URI`
-- `JWT_KEY`
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-
-Common runtime:
+Common:
 
 - `PORT` default `3000`
 - `SERVICE_NAME` default `llm-gateway`
-- `CORS_ALLOWED_ORIGINS` default `https://agumbe.ai`
+- `CORS_ALLOWED_ORIGINS` default `*`
+- `AUTH_MODE` default `none`
+- `AUTH_DEFAULT_USER_ID` default `community-user`
+- `AUTH_DEFAULT_TENANT_ID` default `community`
 - `REQUEST_TIMEOUT_MS` default `30000`
 - `RATE_LIMIT_MAX` default `60`
 - `RATE_LIMIT_WINDOW` default `1 minute`
 - `STORE_LLM_PAYLOADS` default `false`
+
+Auth:
+
+- `JWT_KEY` required when `AUTH_MODE=jwt`
+
+Providers:
+
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `GOOGLE_API_KEY`
+
+Mongo:
+
+- `MONGO_URI`
 
 Kafka:
 
@@ -128,12 +161,11 @@ Kafka:
 - optional `KAFKA_PASSWORD`
 - optional `KAFKA_TIMEOUT_MS`
 
-Optional:
+Pricing:
 
-- `GOOGLE_API_KEY`
 - `MODEL_PRICING_JSON`
 
-`MODEL_PRICING_JSON` lets you supply deploy-time cost estimates instead of hardwiring stale provider pricing into the service. Example:
+Example:
 
 ```json
 {
@@ -144,34 +176,29 @@ Optional:
 }
 ```
 
-## Local development
+## Docker
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+## Development
 
 ```bash
 npm install
-cp .env.example .env
-npm start
-```
-
-If you do not want Kafka locally, keep `KAFKA_ENABLED=false`.
-
-If browser code hosted on `agumbe.ai` calls `api.agumbe.ai` directly, keep `CORS_ALLOWED_ORIGINS=https://agumbe.ai`. Multiple allowed origins can be supplied as a comma-separated list.
-
-## Build and run
-
-```bash
+npm run test:ci
 npm run build
-npm run start:prod
 ```
 
-## Kubernetes
+## Publish notes
 
-`llm-gateway` manifests now live in the shared manifests repo at `manifests-index/infra/k8s/llm-gateway`, matching the other Agumbe core services.
+- Chosen npm package name: `@agumbe/llm-gateway-community`
+- The scope keeps the package tied to the Agumbe namespace while still publishing publicly.
+- `publishConfig.access=public` is already set for scoped public npm publishing.
+- Use the checklist in `PUBLISHING.md` before running `npm publish`.
 
-Current conventions there:
+## Notes
 
-- deployment name: `llm-gateway-depl`
-- service name: `llm-gateway-srv`
-- Mongo secret: `mongodb-secret`
-- JWT secret: `auth-jwt-secret`
-- Kafka secret: `confluent-kafka-secret`
-- provider key secrets: `openai-api-secret` and `anthropic-api-secret`
+- The gateway keeps a few existing `agumbe_*` metadata fields and headers for backward compatibility with current clients.
+- Gemini remains scaffolded and returns a not-enabled response unless you extend the adapter.

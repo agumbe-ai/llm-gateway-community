@@ -1,17 +1,40 @@
 {
-  "name": "llm-gateway",
+  "name": "@agumbe/llm-gateway-community",
   "version": "0.1.0",
-  "private": true,
-  "description": "Agumbe compatibility-first LLM gateway with OpenAI- and Anthropic-compatible routing.",
-  "main": "dist/server.js",
+  "description": "Community edition of an OpenAI-compatible LLM gateway with provider routing, guardrails, and usage telemetry.",
+  "main": "dist/index.js",
+  "bin": {
+    "llm-gateway-community": "dist/server.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    ".env.example"
+  ],
   "scripts": {
     "start": "ts-node-dev --respawn --transpile-only src/server.ts",
     "dev": "npm start",
     "build": "tsc -p tsconfig.json",
     "start:prod": "node dist/server.js",
     "test": "jest --watchAll --no-cache",
-    "test:ci": "jest"
+    "test:ci": "jest",
+    "prepublishOnly": "npm run test:ci && npm run build"
   },
+  "keywords": [
+    "llm",
+    "gateway",
+    "openai-compatible",
+    "anthropic",
+    "fastify"
+  ],
+  "license": "MIT",
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",

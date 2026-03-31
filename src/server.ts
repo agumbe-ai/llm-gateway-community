@@ -1,7 +1,9 @@
+#!/usr/bin/env node
+
 import { getEnv } from "./config/env";
 import { shutdownObservability, startObservability } from "./observability";
 
-async function start() {
+export async function startServer() {
   const env = getEnv();
   await startObservability(env);
 
@@ -37,20 +39,32 @@ async function start() {
     import("./utils/logger"),
   ]);
 
-  await connectMongo(env.MONGO_URI);
+  if (env.MONGO_URI) {
+    await connectMongo(env.MONGO_URI);
+  }
 
   const kafkaService = new KafkaService(env);
   await kafkaService.connect();
 
-  const requestLogService = new RequestLogService(env.STORE_LLM_PAYLOADS);
+  const requestLogService = new RequestLogService(
+    env.STORE_LLM_PAYLOADS,
+    Boolean(env.MONGO_URI),
+  );
   const usageEmitter = new UsageEmitterService(kafkaService, env.KAFKA_TOPIC_USAGE);
   const modelResolver = new ModelResolver();
-  const guardrailConfigService = new GuardrailConfigService();
+  const guardrailConfigService = new GuardrailConfigService(
+    30_000,
+    Boolean(env.MONGO_URI),
+  );
   const guardrailEnforcer = new GuardrailEnforcerService();
 
   const providers = {
-    openai: new OpenAIProviderAdapter(env.OPENAI_API_KEY),
-    anthropic: new AnthropicProviderAdapter(env.ANTHROPIC_API_KEY),
+    ...(env.OPENAI_API_KEY
+      ? { openai: new OpenAIProviderAdapter(env.OPENAI_API_KEY) }
+      : {}),
+    ...(env.ANTHROPIC_API_KEY
+      ? { anthropic: new AnthropicProviderAdapter(env.ANTHROPIC_API_KEY) }
+      : {}),
     google: new GeminiProviderAdapter(env.GOOGLE_API_KEY),
   };
 
@@ -108,9 +122,10 @@ async function start() {
   });
 
   logger.info({ address }, "llm-gateway listening");
+  return app;
 }
 
-start().catch(async (error) => {
+startServer().catch(async (error) => {
   console.error("failed to start llm-gateway", error);
   await shutdownObservability().catch(() => undefined);
   process.exit(1);

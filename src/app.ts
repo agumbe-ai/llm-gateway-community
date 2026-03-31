@@ -36,12 +36,15 @@ const CORS_ALLOWED_METHODS = "GET,HEAD,POST,PUT,OPTIONS";
 
 function applyCorsHeaders(request: FastifyRequest, reply: FastifyReply, allowedOrigins: Set<string>) {
   const origin = request.headers.origin;
-  if (!origin || !allowedOrigins.has(origin)) {
+  const allowAnyOrigin = allowedOrigins.has("*");
+  if (!origin || (!allowAnyOrigin && !allowedOrigins.has(origin))) {
     return false;
   }
 
-  reply.header("Access-Control-Allow-Origin", origin);
-  reply.header("Access-Control-Allow-Credentials", "true");
+  reply.header("Access-Control-Allow-Origin", allowAnyOrigin ? "*" : origin);
+  if (!allowAnyOrigin) {
+    reply.header("Access-Control-Allow-Credentials", "true");
+  }
   reply.header("Access-Control-Allow-Methods", CORS_ALLOWED_METHODS);
   reply.header("Access-Control-Allow-Headers", CORS_ALLOWED_HEADERS);
   reply.header("Vary", "Origin");
@@ -58,8 +61,8 @@ export function buildApp(options: BuildAppOptions) {
       randomUUID(),
   });
 
-  const apiKeyService = new MongoApiKeyService();
-  const requireAuth = createRequireAuth(options.env.JWT_KEY, apiKeyService);
+  const apiKeyService = options.env.MONGO_URI ? new MongoApiKeyService() : undefined;
+  const requireAuth = createRequireAuth(options.env, apiKeyService);
   const allowedOrigins = new Set(options.env.CORS_ALLOWED_ORIGINS);
 
   app.register(cookie);
@@ -120,7 +123,9 @@ export function buildApp(options: BuildAppOptions) {
     }
   });
 
-  registerApiKeyRoutes(app, apiKeyService, requireAuth);
+  if (apiKeyService) {
+    registerApiKeyRoutes(app, apiKeyService, requireAuth);
+  }
   registerHealthRoutes(app, options.env.SERVICE_NAME);
   registerModelsRoutes(app, options.modelResolver);
   registerGuardrailRoutes(app, options.guardrailConfigService, requireAuth);

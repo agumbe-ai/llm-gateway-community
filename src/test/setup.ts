@@ -15,9 +15,12 @@ function createTestEnv(overrides: Partial<Env> = {}): Env {
     OTEL_SERVICE_VERSION: "0.1.0-test",
     DEPLOYMENT_ENVIRONMENT: "test",
     LOG_LEVEL: "silent",
-    CORS_ALLOWED_ORIGINS: ["https://app.agumbe.ai"],
+    CORS_ALLOWED_ORIGINS: ["https://app.example.com"],
     // Current route tests stub data services and never open a Mongo connection.
     MONGO_URI: "mongodb://example.invalid/llm-gateway-test",
+    AUTH_MODE: "jwt",
+    AUTH_DEFAULT_USER_ID: "test-user",
+    AUTH_DEFAULT_TENANT_ID: "test-tenant",
     JWT_KEY: "test-jwt-key",
     KAFKA_ENABLED: false,
     KAFKA_BROKERS: [],
@@ -60,7 +63,7 @@ export function createTestApp(overrides: TestAppOverrides = {}): FastifyInstance
       },
     } as any,
     embeddingsService: {
-      async createEmbedding() {
+      async createEmbeddings() {
         throw new Error("embeddings service stub not implemented for this test");
       },
     } as any,

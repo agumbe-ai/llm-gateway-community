@@ -44,7 +44,7 @@ export type AuthenticatedRequestContext = {
 };
 
 type ChatServiceDeps = {
-  providers: Record<ProviderName, ProviderAdapter>;
+  providers: Partial<Record<ProviderName, ProviderAdapter>>;
   modelResolver: ModelResolver;
   requestLogService: RequestLogService;
   usageEmitter: UsageEmitterService;

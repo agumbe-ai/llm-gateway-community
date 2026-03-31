@@ -88,7 +88,12 @@ const RequestLogModel =
   mongoose.model<RequestLogDocument>("LLMRequestLog", requestLogSchema);
 
 export class RequestLogService {
-  constructor(private readonly storePayloads: boolean) {}
+  private readonly memoryStore: RequestLogRecord[] = [];
+
+  constructor(
+    private readonly storePayloads: boolean,
+    private readonly persistenceEnabled = true,
+  ) {}
 
   async log(record: RequestLogRecord): Promise<void> {
     const payload = this.storePayloads
@@ -99,10 +104,46 @@ export class RequestLogService {
           responsePayload: undefined,
         };
 
+    if (!this.persistenceEnabled) {
+      this.memoryStore.unshift(payload);
+      this.memoryStore.splice(500);
+      return;
+    }
+
     await RequestLogModel.create(payload);
   }
 
   async list(query: RequestLogListQuery): Promise<RequestLogListResult> {
+    if (!this.persistenceEnabled) {
+      const filtered = this.memoryStore.filter((record) => {
+        if (record.tenantId !== query.tenantId) return false;
+        if (query.status && record.status !== query.status) return false;
+        if (query.requestKind && record.requestKind !== query.requestKind) return false;
+        if (
+          query.model &&
+          !record.requestedModel.toLowerCase().includes(query.model.toLowerCase())
+        ) {
+          return false;
+        }
+        return true;
+      });
+
+      const page = Math.max(1, query.page);
+      const pageSize = Math.min(100, Math.max(10, query.pageSize));
+      const start = (page - 1) * pageSize;
+      const data = filtered.slice(start, start + pageSize);
+
+      return {
+        data,
+        pagination: {
+          page,
+          pageSize,
+          total: filtered.length,
+          totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+        },
+      };
+    }
+
     const filters: Record<string, unknown> = {
       tenantId: query.tenantId,
     };

@@ -28,8 +28,11 @@ export type Env = {
   DEPLOYMENT_ENVIRONMENT: string;
   LOG_LEVEL: string;
   CORS_ALLOWED_ORIGINS: string[];
-  MONGO_URI: string;
-  JWT_KEY: string;
+  MONGO_URI?: string;
+  AUTH_MODE: "none" | "jwt";
+  AUTH_DEFAULT_USER_ID: string;
+  AUTH_DEFAULT_TENANT_ID: string;
+  JWT_KEY?: string;
   KAFKA_ENABLED: boolean;
   KAFKA_BROKERS: string[];
   KAFKA_CLIENT_ID: string;
@@ -39,8 +42,8 @@ export type Env = {
   KAFKA_USERNAME?: string;
   KAFKA_PASSWORD?: string;
   KAFKA_TIMEOUT_MS: number;
-  OPENAI_API_KEY: string;
-  ANTHROPIC_API_KEY: string;
+  OPENAI_API_KEY?: string;
+  ANTHROPIC_API_KEY?: string;
   GOOGLE_API_KEY?: string;
   REQUEST_TIMEOUT_MS: number;
   RATE_LIMIT_MAX: number;
@@ -74,21 +77,36 @@ function parsePricing(value?: string): ModelPricing {
   return pricingSchema.parse(parsed);
 }
 
+function parseAuthMode(value?: string): "none" | "jwt" {
+  if (!value) {
+    return "none";
+  }
+
+  if (value === "none" || value === "jwt") {
+    return value;
+  }
+
+  throw new Error('AUTH_MODE must be either "none" or "jwt"');
+}
+
 export function getEnv(): Env {
   const schema = z.object({
     PORT: z.coerce.number().int().positive().default(3000),
-    SERVICE_NAME: z.string().default("llm-gateway"),
-    OTEL_SERVICE_NAME: z.string().default("llm-gateway"),
+    SERVICE_NAME: z.string().default("llm-gateway-community"),
+    OTEL_SERVICE_NAME: z.string().default("llm-gateway-community"),
     OTEL_SERVICE_VERSION: z.string().default(process.env.npm_package_version || "0.1.0"),
     DEPLOYMENT_ENVIRONMENT: z.string().default(process.env.NODE_ENV || "development"),
     LOG_LEVEL: z.string().default("info"),
-    CORS_ALLOWED_ORIGINS: z.string().default("https://agumbe.ai"),
-    MONGO_URI: z.string().min(1, "MONGO_URI is required"),
-    JWT_KEY: z.string().min(1, "JWT_KEY is required"),
+    CORS_ALLOWED_ORIGINS: z.string().default("*"),
+    MONGO_URI: z.string().trim().optional(),
+    AUTH_MODE: z.string().default("none"),
+    AUTH_DEFAULT_USER_ID: z.string().default("community-user"),
+    AUTH_DEFAULT_TENANT_ID: z.string().default("community"),
+    JWT_KEY: z.string().trim().optional(),
     KAFKA_ENABLED: booleanString.default("false").transform(Boolean),
     KAFKA_BROKERS: z.string().optional(),
     KAFKA_SERVERS: z.string().optional(),
-    KAFKA_CLIENT_ID: z.string().default("llm-gateway"),
+    KAFKA_CLIENT_ID: z.string().default("llm-gateway-community"),
     KAFKA_TOPIC_USAGE: z.string().default("llm_usage_raw"),
     KAFKA_PROTOCOL: z.string().optional(),
     KAFKA_MECHANISMS: z.string().optional(),
@@ -96,8 +114,8 @@ export function getEnv(): Env {
     KAFKA_PASSWORD: z.string().optional(),
     KAFKA_TIMEOUT_MS: z.coerce.number().int().positive().default(45000),
     KAFKA_TIMEOUT: z.coerce.number().int().positive().optional(),
-    OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY is required"),
-    ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
+    OPENAI_API_KEY: z.string().trim().optional(),
+    ANTHROPIC_API_KEY: z.string().trim().optional(),
     GOOGLE_API_KEY: z.string().optional(),
     REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
@@ -117,9 +135,14 @@ export function getEnv(): Env {
 
   const raw = schema.parse(process.env);
   const brokers = splitCsv(raw.KAFKA_BROKERS || raw.KAFKA_SERVERS);
+  const authMode = parseAuthMode(raw.AUTH_MODE);
 
   if (raw.KAFKA_ENABLED && brokers.length === 0) {
     throw new Error("KAFKA_BROKERS or KAFKA_SERVERS is required when KAFKA_ENABLED=true");
+  }
+
+  if (authMode === "jwt" && !raw.JWT_KEY) {
+    throw new Error("JWT_KEY is required when AUTH_MODE=jwt");
   }
 
   return {
@@ -130,8 +153,11 @@ export function getEnv(): Env {
     DEPLOYMENT_ENVIRONMENT: raw.DEPLOYMENT_ENVIRONMENT,
     LOG_LEVEL: raw.LOG_LEVEL,
     CORS_ALLOWED_ORIGINS: splitCsv(raw.CORS_ALLOWED_ORIGINS),
-    MONGO_URI: raw.MONGO_URI,
-    JWT_KEY: raw.JWT_KEY,
+    MONGO_URI: raw.MONGO_URI || undefined,
+    AUTH_MODE: authMode,
+    AUTH_DEFAULT_USER_ID: raw.AUTH_DEFAULT_USER_ID,
+    AUTH_DEFAULT_TENANT_ID: raw.AUTH_DEFAULT_TENANT_ID,
+    JWT_KEY: raw.JWT_KEY || undefined,
     KAFKA_ENABLED: raw.KAFKA_ENABLED,
     KAFKA_BROKERS: brokers,
     KAFKA_CLIENT_ID: raw.KAFKA_CLIENT_ID,
@@ -141,8 +167,8 @@ export function getEnv(): Env {
     KAFKA_USERNAME: raw.KAFKA_USERNAME,
     KAFKA_PASSWORD: raw.KAFKA_PASSWORD,
     KAFKA_TIMEOUT_MS: raw.KAFKA_TIMEOUT ?? raw.KAFKA_TIMEOUT_MS,
-    OPENAI_API_KEY: raw.OPENAI_API_KEY,
-    ANTHROPIC_API_KEY: raw.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: raw.OPENAI_API_KEY || undefined,
+    ANTHROPIC_API_KEY: raw.ANTHROPIC_API_KEY || undefined,
     GOOGLE_API_KEY: raw.GOOGLE_API_KEY,
     REQUEST_TIMEOUT_MS: raw.REQUEST_TIMEOUT_MS,
     RATE_LIMIT_MAX: raw.RATE_LIMIT_MAX,

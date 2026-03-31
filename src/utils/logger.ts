@@ -5,7 +5,7 @@ import pino, { type LoggerOptions } from "pino";
 export const loggerOptions: LoggerOptions = {
   level: process.env.LOG_LEVEL || "info",
   base: {
-    service: process.env.SERVICE_NAME || "llm-gateway",
+    service: process.env.SERVICE_NAME || "llm-gateway-community",
   },
   mixin() {
     const spanContext = trace.getActiveSpan()?.spanContext();

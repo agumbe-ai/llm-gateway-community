@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { authError } from "../utils/errors";
+import type { Env } from "../config/env";
 import type { ApiKeyService } from "../services/api-key.service";
 
 type JwtUserPayload = JwtPayload & {
@@ -36,11 +37,24 @@ function readSessionCookieToken(request: FastifyRequest): string | undefined {
   }
 }
 
-export function createRequireAuth(jwtKey: string, apiKeyService?: ApiKeyService) {
+export function createRequireAuth(env: Env, apiKeyService?: ApiKeyService) {
   return async function requireAuth(
     request: FastifyRequest,
     _reply: FastifyReply,
   ) {
+    if (env.AUTH_MODE === "none") {
+      request.currentUser = {
+        id: env.AUTH_DEFAULT_USER_ID,
+        email: undefined,
+        tenant_id: env.AUTH_DEFAULT_TENANT_ID,
+        tenantId: env.AUTH_DEFAULT_TENANT_ID,
+      };
+      request.authContext = {
+        subjectType: "session",
+      };
+      return;
+    }
+
     const token = readBearerToken(request) || readSessionCookieToken(request);
     if (!token) {
       throw authError("Missing Bearer token or session cookie");
@@ -74,7 +88,7 @@ export function createRequireAuth(jwtKey: string, apiKeyService?: ApiKeyService)
     let payload: JwtUserPayload;
 
     try {
-      payload = jwt.verify(token, jwtKey) as JwtUserPayload;
+      payload = jwt.verify(token, env.JWT_KEY!) as JwtUserPayload;
     } catch (error: any) {
       if (error?.name === "TokenExpiredError") {
         throw authError("JWT expired");
