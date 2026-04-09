@@ -32,6 +32,7 @@ import { GuardrailConfigService } from "./guardrail-config.service";
 import { GuardrailEnforcerService } from "./guardrail-enforcer.service";
 import { ModelResolver } from "./model-resolver";
 import { RequestLogService } from "./request-log.service";
+import { executeRoutePlan } from "./routing-executor";
 import { UsageEmitterService } from "./usage-emitter.service";
 
 type EmbeddingsServiceDeps = {
@@ -92,18 +93,26 @@ export class EmbeddingsService {
       const request = embeddingsRequestSchema.parse(input);
       requestedModel = request.model;
 
-      const resolvedModelMeasured = withSpanSync("model.resolve", () =>
+      const routePlanMeasured = withSpanSync("model.resolve", () =>
         measureSync(() =>
-          this.deps.modelResolver.resolve(request.model, "embeddings"),
+          this.deps.modelResolver.resolveRoute(request.model, "embeddings"),
         ),
       );
-      const resolved = resolvedModelMeasured.result;
-      resolvedModel = resolved;
-      modelResolveMs = resolvedModelMeasured.elapsedMs;
+      const routePlan = routePlanMeasured.result;
+      const initialModel = routePlan.candidates[0]?.model;
+      if (!initialModel) {
+        throw providerError(
+          `No routing candidates were available for ${request.model}`,
+          502,
+          "route_unavailable",
+        );
+      }
+      resolvedModel = initialModel;
+      modelResolveMs = routePlanMeasured.elapsedMs;
 
       setActiveSpanAttributes({
-        "provider.name": resolved.provider,
-        "gen_ai.response.model": resolved.canonicalModel,
+        "provider.name": initialModel.provider,
+        "gen_ai.response.model": initialModel.canonicalModel,
       });
 
       const requestedAppId = request.agumbe_guardrails_app_id;
@@ -140,7 +149,7 @@ export class EmbeddingsService {
           this.deps.guardrailEnforcer.prepareEmbeddingsRequest(
             context,
             request,
-            resolved,
+            initialModel,
             policy,
             appliedAppId,
           ),
@@ -149,25 +158,30 @@ export class EmbeddingsService {
       const prepared = preparedMeasured.result;
       guardrailInputMs = preparedMeasured.elapsedMs;
 
-      const adapter = this.deps.providers[resolved.provider];
-      if (!adapter?.embeddings) {
-        throw providerError(
-          `Provider ${resolved.provider} embeddings adapter is not enabled`,
-          501,
-          "unsupported_provider",
-        );
-      }
-
       const providerMeasured = await withSpan("provider.request", () =>
         measureAsync(() =>
-          adapter.embeddings!({
-            model: resolved,
-            input: prepared.request.input,
-            timeoutMs: this.deps.requestTimeoutMs,
+          executeRoutePlan(routePlan, async (candidateModel) => {
+            const adapter = this.deps.providers[candidateModel.provider];
+            if (!adapter?.embeddings) {
+              throw providerError(
+                `Provider ${candidateModel.provider} embeddings adapter is not enabled`,
+                501,
+                "unsupported_provider",
+              );
+            }
+
+            return adapter.embeddings({
+              model: candidateModel,
+              input: prepared.request.input,
+              timeoutMs: this.deps.requestTimeoutMs,
+            });
           }),
         ),
       );
-      const result = providerMeasured.result;
+      const routed = providerMeasured.result;
+      const result = routed.result;
+      const resolved = routed.resolvedModel;
+      resolvedModel = resolved;
       providerMs = providerMeasured.elapsedMs;
 
       const latencyMs = Date.now() - startedAt;

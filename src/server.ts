@@ -51,7 +51,7 @@ export async function startServer() {
     Boolean(env.MONGO_URI),
   );
   const usageEmitter = new UsageEmitterService(kafkaService, env.KAFKA_TOPIC_USAGE);
-  const modelResolver = new ModelResolver();
+  const modelResolver = new ModelResolver(env.ROUTING_CONFIG);
   const guardrailConfigService = new GuardrailConfigService(
     30_000,
     Boolean(env.MONGO_URI),

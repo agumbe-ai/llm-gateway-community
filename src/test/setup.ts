@@ -48,6 +48,7 @@ function createTestEnv(overrides: Partial<Env> = {}): Env {
     OTEL_TRACES_SAMPLER: "parentbased_always_on",
     OTEL_TRACES_SAMPLER_ARG: undefined,
     MODEL_PRICING: {},
+    ROUTING_CONFIG: {},
     ...overrides,
   };
 }
@@ -75,7 +76,7 @@ export function createTestApp(overrides: TestAppOverrides = {}): FastifyInstance
         return settings;
       },
     } as any,
-    modelResolver: new ModelResolver(),
+    modelResolver: new ModelResolver(env.ROUTING_CONFIG),
     requestLogService: {
       async list() {
         return {

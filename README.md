@@ -164,6 +164,7 @@ Kafka:
 Pricing:
 
 - `MODEL_PRICING_JSON`
+- `ROUTING_CONFIG_JSON`
 
 Example:
 
@@ -175,6 +176,26 @@ Example:
   }
 }
 ```
+
+Routing example:
+
+```json
+{
+  "smart-default": {
+    "maxAttempts": 2,
+    "candidates": [
+      { "model": "@openai/gpt-4.1-mini", "weight": 3, "retryAttempts": 2 },
+      { "model": "@anthropic/claude-sonnet-4", "weight": 1, "retryAttempts": 1 }
+    ]
+  }
+}
+```
+
+When a routing rule is configured, the gateway:
+
+- picks a primary candidate using weights
+- retries that candidate up to `retryAttempts`
+- falls back to the next candidate when the failure is retryable
 
 ## Docker
 

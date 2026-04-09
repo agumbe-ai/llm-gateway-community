@@ -20,6 +20,18 @@ const pricingSchema = z.record(
 
 export type ModelPricing = z.infer<typeof pricingSchema>;
 
+export type RoutingConfig = Record<
+  string,
+  {
+    maxAttempts?: number;
+    candidates: Array<{
+      model: string;
+      weight?: number;
+      retryAttempts?: number;
+    }>;
+  }
+>;
+
 export type Env = {
   PORT: number;
   SERVICE_NAME: string;
@@ -59,6 +71,7 @@ export type Env = {
   OTEL_TRACES_SAMPLER: string;
   OTEL_TRACES_SAMPLER_ARG?: string;
   MODEL_PRICING: ModelPricing;
+  ROUTING_CONFIG: RoutingConfig;
 };
 
 function splitCsv(value?: string): string[] {
@@ -75,6 +88,50 @@ function parsePricing(value?: string): ModelPricing {
 
   const parsed = JSON.parse(value);
   return pricingSchema.parse(parsed);
+}
+
+function parseRoutingConfig(value?: string): RoutingConfig {
+  if (!value || !value.trim()) {
+    return {};
+  }
+
+  const parsed = JSON.parse(value) as Record<string, any>;
+  const result: RoutingConfig = {};
+
+  for (const [routeKey, routeValue] of Object.entries(parsed)) {
+    if (!routeValue || typeof routeValue !== "object" || !Array.isArray(routeValue.candidates)) {
+      throw new Error(`ROUTING_CONFIG_JSON entry ${routeKey} must include a candidates array`);
+    }
+
+    result[routeKey] = {
+      maxAttempts:
+        typeof routeValue.maxAttempts === "number" && Number.isFinite(routeValue.maxAttempts)
+          ? routeValue.maxAttempts
+          : undefined,
+      candidates: routeValue.candidates.map((candidate: any, index: number) => {
+        if (!candidate || typeof candidate.model !== "string" || !candidate.model.trim()) {
+          throw new Error(
+            `ROUTING_CONFIG_JSON entry ${routeKey} candidate ${index} must include a model`,
+          );
+        }
+
+        return {
+          model: candidate.model.trim(),
+          weight:
+            typeof candidate.weight === "number" && Number.isFinite(candidate.weight)
+              ? candidate.weight
+              : undefined,
+          retryAttempts:
+            typeof candidate.retryAttempts === "number" &&
+            Number.isFinite(candidate.retryAttempts)
+              ? candidate.retryAttempts
+              : undefined,
+        };
+      }),
+    };
+  }
+
+  return result;
 }
 
 function parseAuthMode(value?: string): "none" | "jwt" {
@@ -131,6 +188,7 @@ export function getEnv(): Env {
     OTEL_TRACES_SAMPLER: z.string().default("parentbased_always_on"),
     OTEL_TRACES_SAMPLER_ARG: z.string().optional(),
     MODEL_PRICING_JSON: z.string().default("{}"),
+    ROUTING_CONFIG_JSON: z.string().default("{}"),
   });
 
   const raw = schema.parse(process.env);
@@ -184,5 +242,6 @@ export function getEnv(): Env {
     OTEL_TRACES_SAMPLER: raw.OTEL_TRACES_SAMPLER,
     OTEL_TRACES_SAMPLER_ARG: raw.OTEL_TRACES_SAMPLER_ARG,
     MODEL_PRICING: parsePricing(raw.MODEL_PRICING_JSON),
+    ROUTING_CONFIG: parseRoutingConfig(raw.ROUTING_CONFIG_JSON),
   };
 }

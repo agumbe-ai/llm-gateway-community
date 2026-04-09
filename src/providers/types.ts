@@ -24,6 +24,17 @@ export type ResolvedModel = {
   alias?: string;
 };
 
+export type ResolvedRouteCandidate = {
+  model: ResolvedModel;
+  retryAttempts: number;
+};
+
+export type ResolvedRoutePlan = {
+  requestedModel: string;
+  kind: RequestKind;
+  candidates: ResolvedRouteCandidate[];
+};
+
 export type ProviderResponseFormat =
   | { type: "json_object" }
   | {
