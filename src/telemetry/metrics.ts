@@ -53,6 +53,15 @@ const usageEmitLatencyMs = meter.createHistogram("llm_gateway_usage_emit_latency
   unit: "ms",
 });
 
+const deadLetterEmitLatencyMs = meter.createHistogram("llm_gateway_dead_letter_emit_latency_ms", {
+  description: "Dead-letter emit latency in milliseconds.",
+  unit: "ms",
+});
+
+const circuitBreakerOpenTotal = meter.createCounter("llm_gateway_circuit_breaker_open_total", {
+  description: "Total number of times a circuit breaker opened.",
+});
+
 const inflightRequests = meter.createUpDownCounter("llm_gateway_inflight_requests", {
   description: "Current number of in-flight gateway requests.",
 });
@@ -99,6 +108,14 @@ export function recordRequestLogLatency(attributes: MetricAttributes, durationMs
 
 export function recordUsageEmitLatency(attributes: MetricAttributes, durationMs: number) {
   usageEmitLatencyMs.record(durationMs, attributes);
+}
+
+export function recordDeadLetterEmitLatency(attributes: MetricAttributes, durationMs: number) {
+  deadLetterEmitLatencyMs.record(durationMs, attributes);
+}
+
+export function recordCircuitBreakerOpen(attributes: MetricAttributes) {
+  circuitBreakerOpenTotal.add(1, attributes);
 }
 
 export function recordTokenUsage(

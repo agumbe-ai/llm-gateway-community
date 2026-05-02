@@ -32,6 +32,22 @@ export type RoutingConfig = Record<
   }
 >;
 
+export type CircuitBreakerConfig = {
+  failureThreshold?: number;
+  cooldownMs?: number;
+};
+
+export type ReliabilityTargetConfig = {
+  timeoutMs?: number;
+  circuitBreaker?: CircuitBreakerConfig;
+};
+
+export type ReliabilityConfig = {
+  defaultTimeoutMs?: number;
+  providers?: Partial<Record<"openai" | "anthropic" | "google", ReliabilityTargetConfig>>;
+  models?: Record<string, ReliabilityTargetConfig>;
+};
+
 export type Env = {
   PORT: number;
   SERVICE_NAME: string;
@@ -72,6 +88,9 @@ export type Env = {
   OTEL_TRACES_SAMPLER_ARG?: string;
   MODEL_PRICING: ModelPricing;
   ROUTING_CONFIG: RoutingConfig;
+  RELIABILITY_CONFIG: ReliabilityConfig;
+  DEAD_LETTER_ENABLED: boolean;
+  KAFKA_TOPIC_DEAD_LETTER: string;
 };
 
 function splitCsv(value?: string): string[] {
@@ -134,6 +153,15 @@ function parseRoutingConfig(value?: string): RoutingConfig {
   return result;
 }
 
+function parseReliabilityConfig(value?: string): ReliabilityConfig {
+  if (!value || !value.trim()) {
+    return {};
+  }
+
+  const parsed = JSON.parse(value) as ReliabilityConfig;
+  return parsed && typeof parsed === "object" ? parsed : {};
+}
+
 function parseAuthMode(value?: string): "none" | "jwt" {
   if (!value) {
     return "none";
@@ -165,6 +193,7 @@ export function getEnv(): Env {
     KAFKA_SERVERS: z.string().optional(),
     KAFKA_CLIENT_ID: z.string().default("llm-gateway-community"),
     KAFKA_TOPIC_USAGE: z.string().default("llm_usage_raw"),
+    KAFKA_TOPIC_DEAD_LETTER: z.string().default("llm_dead_letter"),
     KAFKA_PROTOCOL: z.string().optional(),
     KAFKA_MECHANISMS: z.string().optional(),
     KAFKA_USERNAME: z.string().optional(),
@@ -189,6 +218,8 @@ export function getEnv(): Env {
     OTEL_TRACES_SAMPLER_ARG: z.string().optional(),
     MODEL_PRICING_JSON: z.string().default("{}"),
     ROUTING_CONFIG_JSON: z.string().default("{}"),
+    RELIABILITY_CONFIG_JSON: z.string().default("{}"),
+    DEAD_LETTER_ENABLED: booleanString.default("false").transform(Boolean),
   });
 
   const raw = schema.parse(process.env);
@@ -220,6 +251,7 @@ export function getEnv(): Env {
     KAFKA_BROKERS: brokers,
     KAFKA_CLIENT_ID: raw.KAFKA_CLIENT_ID,
     KAFKA_TOPIC_USAGE: raw.KAFKA_TOPIC_USAGE,
+    KAFKA_TOPIC_DEAD_LETTER: raw.KAFKA_TOPIC_DEAD_LETTER,
     KAFKA_PROTOCOL: raw.KAFKA_PROTOCOL,
     KAFKA_MECHANISMS: raw.KAFKA_MECHANISMS,
     KAFKA_USERNAME: raw.KAFKA_USERNAME,
@@ -243,5 +275,7 @@ export function getEnv(): Env {
     OTEL_TRACES_SAMPLER_ARG: raw.OTEL_TRACES_SAMPLER_ARG,
     MODEL_PRICING: parsePricing(raw.MODEL_PRICING_JSON),
     ROUTING_CONFIG: parseRoutingConfig(raw.ROUTING_CONFIG_JSON),
+    RELIABILITY_CONFIG: parseReliabilityConfig(raw.RELIABILITY_CONFIG_JSON),
+    DEAD_LETTER_ENABLED: raw.DEAD_LETTER_ENABLED,
   };
 }

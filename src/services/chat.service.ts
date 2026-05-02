@@ -3,6 +3,8 @@ import type { Attributes } from "@opentelemetry/api";
 import type { ModelPricing } from "../config/env";
 import type { ProviderAdapter, ProviderName, ResolvedModel } from "../providers/types";
 import {
+  recordCircuitBreakerOpen,
+  recordDeadLetterEmitLatency,
   recordEstimatedCost,
   recordGuardrailLatency,
   recordPolicyBlock,
@@ -31,7 +33,9 @@ import {
 import { GuardrailConfigService } from "./guardrail-config.service";
 import { GuardrailEnforcerService } from "./guardrail-enforcer.service";
 import { ModelResolver } from "./model-resolver";
+import { DeadLetterService, toDeadLetterEvent } from "./dead-letter.service";
 import { RequestLogService } from "./request-log.service";
+import { ReliabilityService } from "./reliability.service";
 import { executeRoutePlan } from "./routing-executor";
 import { UsageEmitterService } from "./usage-emitter.service";
 
@@ -51,6 +55,8 @@ type ChatServiceDeps = {
   usageEmitter: UsageEmitterService;
   guardrailConfigService: GuardrailConfigService;
   guardrailEnforcer: GuardrailEnforcerService;
+  deadLetterService: DeadLetterService;
+  reliabilityService: ReliabilityService;
   modelPricing: ModelPricing;
   requestTimeoutMs: number;
 };
@@ -81,6 +87,7 @@ export class ChatService {
     let resolvedModel: ResolvedModel | undefined;
     let requestMode: "sync" | "stream" = "sync";
     let policySet = context.appId || "default";
+    let deadLetterEmitMs = 0;
 
     const buildMetricAttributes = (overrides?: Attributes): Attributes => ({
       route_kind: "chat",
@@ -190,8 +197,31 @@ export class ChatService {
               maxOutputTokens: prepared.request.max_output_tokens,
               temperature: prepared.request.temperature,
               responseFormat: prepared.request.response_format,
-              timeoutMs: this.deps.requestTimeoutMs,
+              timeoutMs: this.deps.reliabilityService.getTimeoutMs(
+                candidateModel,
+                this.deps.requestTimeoutMs,
+              ),
             });
+          }, {
+            beforeAttempt: async (candidateModel) => {
+              this.deps.reliabilityService.assertCircuitClosed(candidateModel);
+            },
+            onSuccess: async (candidateModel) => {
+              this.deps.reliabilityService.recordSuccess(candidateModel);
+            },
+            onFailure: async (candidateModel, error) => {
+              if (error.type === "api_error" || error.type === "rate_limit_error") {
+                const opened = this.deps.reliabilityService.recordFailure(candidateModel);
+                if (opened) {
+                  recordCircuitBreakerOpen(
+                    buildMetricAttributes({
+                      provider: candidateModel.provider,
+                      model: candidateModel.canonicalModel,
+                    }),
+                  );
+                }
+              }
+            },
           }),
         ),
       );
@@ -392,6 +422,24 @@ export class ChatService {
           errorCode: normalized.code,
           timestamp: new Date().toISOString(),
         }),
+        withSpan("dead_letter.emit", () =>
+          measureAsync(() =>
+            this.deps.deadLetterService.emit(
+              toDeadLetterEvent({
+                requestId: context.requestId,
+                tenantId: context.tenantId,
+                userId: context.userId,
+                requestKind: "chat",
+                requestedModel,
+                provider: resolvedModel?.provider || "unknown",
+                upstreamModel: resolvedModel?.upstreamModel || "unknown",
+                error: normalized,
+              }),
+            ),
+          ),
+        ).then((measured) => {
+          deadLetterEmitMs = measured.elapsedMs;
+        }),
       ]);
 
       const metricAttributes = buildMetricAttributes({
@@ -399,6 +447,7 @@ export class ChatService {
       });
       recordRequest(metricAttributes, latencyMs);
       recordRequestError(metricAttributes);
+      recordDeadLetterEmitLatency(metricAttributes, deadLetterEmitMs);
       if (isPolicyBlockedCode(normalized.code)) {
         recordPolicyBlock(metricAttributes);
       }

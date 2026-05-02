@@ -100,6 +100,7 @@ With `MONGO_URI`:
 With `KAFKA_ENABLED=true`:
 
 - usage events are emitted to `KAFKA_TOPIC_USAGE`
+- dead-letter events can be emitted to `KAFKA_TOPIC_DEAD_LETTER` when `DEAD_LETTER_ENABLED=true`
 
 ## Supported model syntax
 
@@ -155,6 +156,7 @@ Kafka:
 - `KAFKA_BROKERS` or `KAFKA_SERVERS`
 - `KAFKA_CLIENT_ID`
 - `KAFKA_TOPIC_USAGE`
+- `KAFKA_TOPIC_DEAD_LETTER`
 - optional `KAFKA_PROTOCOL`
 - optional `KAFKA_MECHANISMS`
 - optional `KAFKA_USERNAME`
@@ -165,6 +167,8 @@ Pricing:
 
 - `MODEL_PRICING_JSON`
 - `ROUTING_CONFIG_JSON`
+- `RELIABILITY_CONFIG_JSON`
+- `DEAD_LETTER_ENABLED`
 
 Example:
 
@@ -196,6 +200,34 @@ When a routing rule is configured, the gateway:
 - picks a primary candidate using weights
 - retries that candidate up to `retryAttempts`
 - falls back to the next candidate when the failure is retryable
+
+Reliability example:
+
+```json
+{
+  "defaultTimeoutMs": 30000,
+  "providers": {
+    "openai": {
+      "timeoutMs": 20000,
+      "circuitBreaker": {
+        "failureThreshold": 3,
+        "cooldownMs": 30000
+      }
+    }
+  },
+  "models": {
+    "@openai/gpt-4.1-mini": {
+      "timeoutMs": 10000
+    }
+  }
+}
+```
+
+With reliability config enabled, the community gateway supports:
+
+- timeout overrides by provider or model
+- in-memory circuit breakers with cooldown-based recovery
+- dead-letter events for terminal request failures
 
 ## Docker
 

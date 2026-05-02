@@ -74,3 +74,27 @@ test("executeRoutePlan does not retry non-retryable request errors", async () =>
   });
   expect(invoke).toHaveBeenCalledTimes(1);
 });
+
+test("executeRoutePlan respects beforeAttempt hook failures and can fall back", async () => {
+  const invoke = jest.fn().mockResolvedValue("ok");
+
+  const result = await executeRoutePlan(
+    chatPlan,
+    invoke,
+    {
+      beforeAttempt(model) {
+        if (model.provider === "openai") {
+          throw new AppError("circuit open", {
+            statusCode: 503,
+            code: "circuit_open",
+            type: "api_error",
+          });
+        }
+      },
+    },
+  );
+
+  expect(result.result).toBe("ok");
+  expect(result.resolvedModel.provider).toBe("anthropic");
+  expect(invoke).toHaveBeenCalledTimes(1);
+});

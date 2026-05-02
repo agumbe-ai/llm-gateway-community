@@ -19,7 +19,9 @@ export async function startServer() {
     { KafkaService },
     { ModelResolver },
     { closeMongo, connectMongo },
+    { DeadLetterService },
     { RequestLogService },
+    { ReliabilityService },
     { UsageEmitterService },
     { logger },
   ] = await Promise.all([
@@ -34,7 +36,9 @@ export async function startServer() {
     import("./services/kafka"),
     import("./services/model-resolver"),
     import("./services/mongo"),
+    import("./services/dead-letter.service"),
     import("./services/request-log.service"),
+    import("./services/reliability.service"),
     import("./services/usage-emitter.service"),
     import("./utils/logger"),
   ]);
@@ -51,6 +55,12 @@ export async function startServer() {
     Boolean(env.MONGO_URI),
   );
   const usageEmitter = new UsageEmitterService(kafkaService, env.KAFKA_TOPIC_USAGE);
+  const deadLetterService = new DeadLetterService(
+    kafkaService,
+    env.KAFKA_TOPIC_DEAD_LETTER,
+    env.DEAD_LETTER_ENABLED,
+  );
+  const reliabilityService = new ReliabilityService(env.RELIABILITY_CONFIG);
   const modelResolver = new ModelResolver(env.ROUTING_CONFIG);
   const guardrailConfigService = new GuardrailConfigService(
     30_000,
@@ -75,6 +85,8 @@ export async function startServer() {
     usageEmitter,
     guardrailConfigService,
     guardrailEnforcer,
+    deadLetterService,
+    reliabilityService,
     modelPricing: env.MODEL_PRICING,
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
   });
@@ -86,6 +98,8 @@ export async function startServer() {
     usageEmitter,
     guardrailConfigService,
     guardrailEnforcer,
+    deadLetterService,
+    reliabilityService,
     modelPricing: env.MODEL_PRICING,
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
   });

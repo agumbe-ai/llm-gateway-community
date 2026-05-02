@@ -2,6 +2,8 @@ import type { Attributes } from "@opentelemetry/api";
 import type { ModelPricing } from "../config/env";
 import type { ProviderAdapter, ProviderName, ResolvedModel } from "../providers/types";
 import {
+  recordCircuitBreakerOpen,
+  recordDeadLetterEmitLatency,
   recordEstimatedCost,
   recordGuardrailLatency,
   recordPolicyBlock,
@@ -31,7 +33,9 @@ import type { AuthenticatedRequestContext } from "./chat.service";
 import { GuardrailConfigService } from "./guardrail-config.service";
 import { GuardrailEnforcerService } from "./guardrail-enforcer.service";
 import { ModelResolver } from "./model-resolver";
+import { DeadLetterService, toDeadLetterEvent } from "./dead-letter.service";
 import { RequestLogService } from "./request-log.service";
+import { ReliabilityService } from "./reliability.service";
 import { executeRoutePlan } from "./routing-executor";
 import { UsageEmitterService } from "./usage-emitter.service";
 
@@ -42,6 +46,8 @@ type EmbeddingsServiceDeps = {
   usageEmitter: UsageEmitterService;
   guardrailConfigService: GuardrailConfigService;
   guardrailEnforcer: GuardrailEnforcerService;
+  deadLetterService: DeadLetterService;
+  reliabilityService: ReliabilityService;
   modelPricing: ModelPricing;
   requestTimeoutMs: number;
 };
@@ -71,6 +77,7 @@ export class EmbeddingsService {
     let requestedModel = typeof rawModel === "string" ? rawModel : "unknown";
     let resolvedModel: ResolvedModel | undefined;
     let policySet = context.appId || "default";
+    let deadLetterEmitMs = 0;
 
     const buildMetricAttributes = (overrides?: Attributes): Attributes => ({
       route_kind: "embeddings",
@@ -173,8 +180,31 @@ export class EmbeddingsService {
             return adapter.embeddings({
               model: candidateModel,
               input: prepared.request.input,
-              timeoutMs: this.deps.requestTimeoutMs,
+              timeoutMs: this.deps.reliabilityService.getTimeoutMs(
+                candidateModel,
+                this.deps.requestTimeoutMs,
+              ),
             });
+          }, {
+            beforeAttempt: async (candidateModel) => {
+              this.deps.reliabilityService.assertCircuitClosed(candidateModel);
+            },
+            onSuccess: async (candidateModel) => {
+              this.deps.reliabilityService.recordSuccess(candidateModel);
+            },
+            onFailure: async (candidateModel, error) => {
+              if (error.type === "api_error" || error.type === "rate_limit_error") {
+                const opened = this.deps.reliabilityService.recordFailure(candidateModel);
+                if (opened) {
+                  recordCircuitBreakerOpen(
+                    buildMetricAttributes({
+                      provider: candidateModel.provider,
+                      model: candidateModel.canonicalModel,
+                    }),
+                  );
+                }
+              }
+            },
           }),
         ),
       );
@@ -350,6 +380,24 @@ export class EmbeddingsService {
           errorCode: normalized.code,
           timestamp: new Date().toISOString(),
         }),
+        withSpan("dead_letter.emit", () =>
+          measureAsync(() =>
+            this.deps.deadLetterService.emit(
+              toDeadLetterEvent({
+                requestId: context.requestId,
+                tenantId: context.tenantId,
+                userId: context.userId,
+                requestKind: "embeddings",
+                requestedModel,
+                provider: resolvedModel?.provider || "unknown",
+                upstreamModel: resolvedModel?.upstreamModel || "unknown",
+                error: normalized,
+              }),
+            ),
+          ),
+        ).then((measured) => {
+          deadLetterEmitMs = measured.elapsedMs;
+        }),
       ]);
 
       const metricAttributes = buildMetricAttributes({
@@ -357,6 +405,7 @@ export class EmbeddingsService {
       });
       recordRequest(metricAttributes, latencyMs);
       recordRequestError(metricAttributes);
+      recordDeadLetterEmitLatency(metricAttributes, deadLetterEmitMs);
       if (isPolicyBlockedCode(normalized.code)) {
         recordPolicyBlock(metricAttributes);
       }

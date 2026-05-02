@@ -26,6 +26,7 @@ function createTestEnv(overrides: Partial<Env> = {}): Env {
     KAFKA_BROKERS: [],
     KAFKA_CLIENT_ID: "llm-gateway-test",
     KAFKA_TOPIC_USAGE: "llm_usage_raw",
+    KAFKA_TOPIC_DEAD_LETTER: "llm_dead_letter",
     KAFKA_PROTOCOL: undefined,
     KAFKA_MECHANISMS: undefined,
     KAFKA_USERNAME: undefined,
@@ -49,6 +50,8 @@ function createTestEnv(overrides: Partial<Env> = {}): Env {
     OTEL_TRACES_SAMPLER_ARG: undefined,
     MODEL_PRICING: {},
     ROUTING_CONFIG: {},
+    RELIABILITY_CONFIG: {},
+    DEAD_LETTER_ENABLED: false,
     ...overrides,
   };
 }

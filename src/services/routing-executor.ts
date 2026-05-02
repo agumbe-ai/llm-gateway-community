@@ -7,9 +7,20 @@ export type RouteExecutionResult<T> = {
   attempts: number;
 };
 
+type RouteExecutionOptions = {
+  beforeAttempt?: (model: ResolvedModel, attemptNumber: number) => void | Promise<void>;
+  onSuccess?: (model: ResolvedModel, attemptNumber: number) => void | Promise<void>;
+  onFailure?: (
+    model: ResolvedModel,
+    error: AppError,
+    attemptNumber: number,
+  ) => void | Promise<void>;
+};
+
 export async function executeRoutePlan<T>(
   plan: ResolvedRoutePlan,
   invoke: (model: ResolvedModel) => Promise<T>,
+  options: RouteExecutionOptions = {},
 ): Promise<RouteExecutionResult<T>> {
   let attempts = 0;
   let lastError: AppError | undefined;
@@ -19,7 +30,9 @@ export async function executeRoutePlan<T>(
       attempts += 1;
 
       try {
+        await options.beforeAttempt?.(candidate.model, attempts);
         const result = await invoke(candidate.model);
+        await options.onSuccess?.(candidate.model, attempts);
         return {
           result,
           resolvedModel: candidate.model,
@@ -28,6 +41,7 @@ export async function executeRoutePlan<T>(
       } catch (error) {
         const normalized = normalizeError(error);
         lastError = normalized;
+        await options.onFailure?.(candidate.model, normalized, attempts);
 
         if (!isRetryableRoutingError(normalized)) {
           throw normalized;
