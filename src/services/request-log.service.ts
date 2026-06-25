@@ -11,7 +11,7 @@ export type RequestLogRecord = {
   operation?: string;
   externalRequestId?: string;
   requestId: string;
-  requestKind: "chat" | "embeddings";
+  requestKind: "chat" | "embeddings" | "responses";
   requestedModel: string;
   provider: string;
   upstreamModel: string;
@@ -32,7 +32,7 @@ export type RequestLogListQuery = {
   page: number;
   pageSize: number;
   status?: "success" | "error";
-  requestKind?: "chat" | "embeddings";
+  requestKind?: "chat" | "embeddings" | "responses";
   model?: string;
 };
 
@@ -60,7 +60,7 @@ const requestLogSchema = new mongoose.Schema<RequestLogDocument>(
     sourceService: { type: String, index: true },
     operation: { type: String, index: true },
     externalRequestId: { type: String, index: true },
-    requestKind: { type: String, enum: ["chat", "embeddings"], required: true },
+    requestKind: { type: String, enum: ["chat", "embeddings", "responses"], required: true },
     requestedModel: { type: String, required: true },
     provider: { type: String, required: true },
     upstreamModel: { type: String, required: true },

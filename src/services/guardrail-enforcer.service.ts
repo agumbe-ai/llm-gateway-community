@@ -1,6 +1,7 @@
 import type { ChatMessage, ResolvedModel } from "../providers/types";
 import type { ChatRequest } from "../types/chat";
 import type { EmbeddingsRequest } from "../types/embeddings";
+import type { ResponsesRequest } from "../types/responses";
 import type {
   GuardrailDecision,
   GuardrailMode,
@@ -8,6 +9,7 @@ import type {
   GuardrailTrace,
 } from "../types/guardrails";
 import { AppError } from "../utils/errors";
+import { responseInputItemIsUntrusted } from "../utils/responses-input";
 import type { AuthenticatedRequestContext } from "./chat.service";
 
 type PreparedChatRequest = {
@@ -17,6 +19,11 @@ type PreparedChatRequest = {
 
 type PreparedEmbeddingsRequest = {
   request: EmbeddingsRequest;
+  trace: GuardrailTrace;
+};
+
+type PreparedResponsesRequest = {
+  request: ResponsesRequest;
   trace: GuardrailTrace;
 };
 
@@ -150,7 +157,56 @@ function cloneMessages(messages: ChatMessage[]) {
   return messages.map((message) => ({ ...message }));
 }
 
+function transformResponsesInputStrings(
+  value: ResponsesRequest["input"],
+  transformUntrusted: (value: string, blockParam: string) => string,
+  transformTrusted: (value: string, blockParam: string) => string,
+): ResponsesRequest["input"] {
+  const visit = (
+    current: unknown,
+    path: string,
+    contentBearing: boolean,
+    untrusted: boolean,
+  ): unknown => {
+    if (typeof current === "string") {
+      if (!contentBearing) {
+        return current;
+      }
+      return untrusted
+        ? transformUntrusted(current, path)
+        : transformTrusted(current, path);
+    }
+    if (Array.isArray(current)) {
+      return current.map((item, index) => visit(item, `${path}[${index}]`, contentBearing, untrusted));
+    }
+    if (!current || typeof current !== "object") {
+      return current;
+    }
+
+    const record = current as Record<string, unknown>;
+    const itemUntrusted = responseInputItemIsUntrusted(record, untrusted);
+
+    return Object.fromEntries(
+      Object.entries(record).map(([key, child]) => [
+        key,
+        visit(
+          child,
+          `${path}.${key}`,
+          ["text", "content", "input", "output", "arguments"].includes(key),
+          itemUntrusted,
+        ),
+      ]),
+    );
+  };
+
+  return visit(value, "input", true, true) as ResponsesRequest["input"];
+}
+
 function cloneEmbeddingsInput(input: string | string[]) {
+  return Array.isArray(input) ? [...input] : input;
+}
+
+function cloneResponsesInput(input: ResponsesRequest["input"]) {
   return Array.isArray(input) ? [...input] : input;
 }
 
@@ -413,6 +469,142 @@ export class GuardrailEnforcerService {
     request.input = Array.isArray(request.input)
       ? request.input.map(transformValue)
       : transformValue(request.input);
+
+    return { request, trace };
+  }
+
+  prepareResponsesRequest(
+    context: AuthenticatedRequestContext,
+    input: ResponsesRequest,
+    resolvedModel: ResolvedModel,
+    policy: GuardrailPolicy | undefined,
+    appliedAppId?: string,
+  ): PreparedResponsesRequest {
+    const trace = createTrace(context, policy, appliedAppId);
+    const request: ResponsesRequest = {
+      ...input,
+      input: cloneResponsesInput(input.input),
+    };
+
+    this.enforceSharedPolicies(context, request.model, resolvedModel, policy, trace, appliedAppId);
+
+    if (policy?.maxTokens) {
+      const nextMaxTokens = Math.min(request.max_output_tokens ?? policy.maxTokens, policy.maxTokens);
+      if (request.max_output_tokens !== nextMaxTokens) {
+        addDecision(trace, {
+          guardrail: "max_tokens",
+          stage: "request",
+          action: "capped",
+          mode: "enforce",
+          detail: `Capped max output tokens to ${policy.maxTokens}`,
+        });
+      }
+      request.max_output_tokens = nextMaxTokens;
+    }
+
+    const transformValue = (value: string, blockParam: string) => {
+      let content = value;
+
+      content = this.applyRuleSet({
+        content,
+        mode: policy?.promptInjection ?? "off",
+        rules: DIRECT_PROMPT_INJECTION_RULES,
+        trace,
+        guardrail: "prompt_injection",
+        stage: "input",
+        blockMessage: "Response input blocked by prompt-injection guardrail",
+        blockParam,
+      });
+
+      content = this.applyRuleSet({
+        content,
+        mode: policy?.indirectPromptInjection ?? "off",
+        rules: INDIRECT_PROMPT_INJECTION_RULES,
+        trace,
+        guardrail: "indirect_prompt_injection",
+        stage: "input",
+        blockMessage: "Response input blocked by indirect prompt-injection guardrail",
+        blockParam,
+      });
+
+      content = this.applyRuleSet({
+        content,
+        mode: policy?.pii ?? "off",
+        rules: PII_RULES,
+        trace,
+        guardrail: "pii",
+        stage: "input",
+        blockMessage: "Response input blocked by PII guardrail",
+        blockParam,
+      });
+
+      content = this.applyRuleSet({
+        content,
+        mode: policy?.secrets ?? "off",
+        rules: SECRET_RULES,
+        trace,
+        guardrail: "secrets",
+        stage: "input",
+        blockMessage: "Response input blocked by secrets guardrail",
+        blockParam,
+      });
+
+      content = this.applyDeniedTopics({
+        content,
+        mode: policy?.deniedTopics ?? "off",
+        topics: policy?.deniedTopicsList || [],
+        trace,
+        blockMessage: "Response input blocked by denied-topics guardrail",
+        blockParam,
+      });
+
+      return content;
+    };
+
+    const transformTrustedValue = (value: string, blockParam: string) => {
+      let content = value;
+
+      content = this.applyRuleSet({
+        content,
+        mode: policy?.pii ?? "off",
+        rules: PII_RULES,
+        trace,
+        guardrail: "pii",
+        stage: "input",
+        blockMessage: "Response instructions blocked by PII guardrail",
+        blockParam,
+      });
+
+      content = this.applyRuleSet({
+        content,
+        mode: policy?.secrets ?? "off",
+        rules: SECRET_RULES,
+        trace,
+        guardrail: "secrets",
+        stage: "input",
+        blockMessage: "Response instructions blocked by secrets guardrail",
+        blockParam,
+      });
+
+      return this.applyDeniedTopics({
+        content,
+        mode: policy?.deniedTopics ?? "off",
+        topics: policy?.deniedTopicsList || [],
+        trace,
+        blockMessage: "Response instructions blocked by denied-topics guardrail",
+        blockParam,
+      });
+    };
+
+    if (request.instructions) {
+      request.instructions = transformTrustedValue(request.instructions, "instructions");
+    }
+
+    request.input = transformResponsesInputStrings(
+      request.input,
+      transformValue,
+      transformTrustedValue,
+    );
 
     return { request, trace };
   }
@@ -754,4 +946,3 @@ export class GuardrailEnforcerService {
     );
   }
 }
-

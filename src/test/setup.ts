@@ -66,6 +66,14 @@ export function createTestApp(overrides: TestAppOverrides = {}): FastifyInstance
         throw new Error("chat service stub not implemented for this test");
       },
     } as any,
+    responsesService: {
+      async createResponse() {
+        throw new Error("responses service stub not implemented for this test");
+      },
+      async createResponseStream() {
+        throw new Error("responses service stub not implemented for this test");
+      },
+    } as any,
     embeddingsService: {
       async createEmbeddings() {
         throw new Error("embeddings service stub not implemented for this test");

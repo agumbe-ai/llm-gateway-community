@@ -11,8 +11,11 @@ import { registerGuardrailRoutes } from "./routes/guardrails";
 import { registerHealthRoutes } from "./routes/health";
 import { registerModelsRoutes } from "./routes/models";
 import { registerRequestRoutes } from "./routes/requests";
+import { registerResponsesRoutes } from "./routes/responses";
+import { registerAnthropicCompatibilityRoutes } from "./routes/anthropic-compatibility";
 import { ChatService } from "./services/chat.service";
 import { EmbeddingsService } from "./services/embeddings.service";
+import { ResponsesService } from "./services/responses.service";
 import { GuardrailConfigService } from "./services/guardrail-config.service";
 import { ModelResolver } from "./services/model-resolver";
 import { RequestLogService } from "./services/request-log.service";
@@ -24,6 +27,7 @@ import { registerApiKeyRoutes } from "./routes/api-keys";
 type BuildAppOptions = {
   env: Env;
   chatService: ChatService;
+  responsesService: ResponsesService;
   embeddingsService: EmbeddingsService;
   guardrailConfigService: GuardrailConfigService;
   modelResolver: ModelResolver;
@@ -31,7 +35,7 @@ type BuildAppOptions = {
 };
 
 const CORS_ALLOWED_HEADERS =
-  "authorization, content-type, x-request-id, x-agumbe-workspace-id, x-agumbe-xnamespace-id, x-agumbe-source-service, x-agumbe-operation, x-agumbe-external-request-id";
+  "authorization, content-type, x-api-key, anthropic-version, anthropic-beta, x-claude-code-session-id, x-claude-code-agent-id, x-claude-code-parent-agent-id, x-request-id, x-agumbe-workspace-id, x-agumbe-xnamespace-id, x-agumbe-source-service, x-agumbe-operation, x-agumbe-external-request-id";
 const CORS_ALLOWED_METHODS = "GET,HEAD,POST,PUT,OPTIONS";
 
 function applyCorsHeaders(request: FastifyRequest, reply: FastifyReply, allowedOrigins: Set<string>) {
@@ -131,6 +135,13 @@ export function buildApp(options: BuildAppOptions) {
   registerGuardrailRoutes(app, options.guardrailConfigService, requireAuth);
   registerRequestRoutes(app, options.requestLogService, requireAuth);
   registerChatRoutes(app, options.chatService, requireAuth);
+  registerResponsesRoutes(app, options.responsesService, requireAuth);
+  registerAnthropicCompatibilityRoutes(
+    app,
+    options.responsesService,
+    options.modelResolver,
+    requireAuth,
+  );
   registerEmbeddingsRoutes(app, options.embeddingsService, requireAuth);
 
   return app;

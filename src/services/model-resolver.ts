@@ -27,13 +27,13 @@ export class ModelResolver {
       ? this.resolveQualifiedModel(aliasTarget, requestedModel, true)
       : this.resolveQualifiedModel(requestedModel, requestedModel, false);
 
-    if (resolved.kind !== requestKind) {
+    if (resolved.kind !== requestKind && !(requestKind === "responses" && resolved.kind === "chat")) {
       throw invalidModel(
         `Model ${requestedModel} resolves to ${resolved.kind} and cannot be used with the ${requestKind} endpoint`,
       );
     }
 
-    return resolved;
+    return requestKind === "responses" ? { ...resolved, kind: "responses" } : resolved;
   }
 
   resolveRoute(requestedModel: string, requestKind: RequestKind): ResolvedRoutePlan {

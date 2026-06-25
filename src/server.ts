@@ -14,6 +14,7 @@ export async function startServer() {
     { OpenAIProviderAdapter },
     { ChatService },
     { EmbeddingsService },
+    { ResponsesService },
     { GuardrailConfigService },
     { GuardrailEnforcerService },
     { KafkaService },
@@ -31,6 +32,7 @@ export async function startServer() {
     import("./providers/openai"),
     import("./services/chat.service"),
     import("./services/embeddings.service"),
+    import("./services/responses.service"),
     import("./services/guardrail-config.service"),
     import("./services/guardrail-enforcer.service"),
     import("./services/kafka"),
@@ -104,9 +106,23 @@ export async function startServer() {
     requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
   });
 
+  const responsesService = new ResponsesService({
+    providers,
+    modelResolver,
+    requestLogService,
+    usageEmitter,
+    guardrailConfigService,
+    guardrailEnforcer,
+    deadLetterService,
+    reliabilityService,
+    modelPricing: env.MODEL_PRICING,
+    requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
+  });
+
   const app = buildApp({
     env,
     chatService,
+    responsesService,
     embeddingsService,
     guardrailConfigService,
     modelResolver,
